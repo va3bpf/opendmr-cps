@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>OpenDMR CPS</title>
+    <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="topbar">
+    <div class="brand">
+        <div class="brand-mark">DM</div>
+        <div><span data-i18n="title">OpenDMR CPS</span><br><small>Baofeng DM-32 · OpenDMR</small></div>
+    </div>
+    <div class="group">
+        <button id="btnNew" class="ghost" data-icon="new"><span data-i18n="newCodeplug">New</span></button>
+        <button id="btnOpen" class="ghost" data-icon="open"><span data-i18n="openFile">Open file</span></button>
+        <button id="btnSave" class="ghost" data-icon="save"><span data-i18n="saveFile">Save file</span></button>
+    </div>
+    <div class="group">
+        <button id="btnConnect" data-icon="plug"><span data-i18n="connect">Connect</span></button>
+        <button id="btnRead" data-icon="download" disabled><span data-i18n="readRadio">Read radio</span></button>
+        <button id="btnWrite" class="primary" data-icon="upload" disabled><span data-i18n="writeRadio">Write radio</span></button>
+    </div>
+    <div class="group">
+        <button id="btnLang" class="ghost" data-icon="globe"><span data-i18n="language">English</span></button>
+    </div>
+    <input type="file" id="fileInput" accept=".opendmr" hidden>
+</header>
+
+<div class="statusbar">
+    <span class="dot" id="linkDot"></span>
+    <span id="status" data-i18n="notConnected">Not connected</span>
+    <div class="progress" id="progressBox" hidden><div id="progressBar"></div></div>
+    <span id="radioInfo"></span>
+</div>
+
+<div class="layout">
+    <nav class="sidebar">
+        <div class="side-label" data-i18n="codeplug">Codeplug</div>
+        <button class="tab active" data-tab="channels" data-icon="channels"><span data-i18n="channels">Channels</span><span class="badge" id="countChannels"></span></button>
+        <button class="tab" data-tab="zones" data-icon="zones"><span data-i18n="zones">Zones</span><span class="badge" id="countZones"></span></button>
+        <button class="tab" data-tab="contacts" data-icon="contact"><span data-i18n="contacts">Contacts</span><span class="badge" id="countContacts"></span></button>
+        <button class="tab" data-tab="rxGroups" data-icon="group"><span data-i18n="rxGroups">TG lists</span><span class="badge" id="countRxGroups"></span></button>
+        <button class="tab" data-tab="vfo" data-icon="vfo"><span data-i18n="vfo">VFO</span></button>
+        <button class="tab" data-tab="satellites" data-icon="satellite"><span data-i18n="satellites">Satellites</span><span class="badge" id="countSatellites"></span></button>
+        <button class="tab" data-tab="radioSettings" data-icon="sliders"><span data-i18n="radioSettings">Radio settings</span></button>
+        <button class="tab" data-tab="general" data-icon="settings"><span data-i18n="general">General</span></button>
+        <div class="side-foot">OpenDMR CPS · v0.1</div>
+    </nav>
+    <main id="content"></main>
+</div>
+
+<div id="toast" hidden></div>
+<script id="file-hint">
+// index.html opened from disk: its modules do not load there (build.py leaves this out of opendmr-cps.html)
+if (location.protocol === 'file:') {
+    document.body.insertAdjacentHTML('afterbegin', '<div style="padding:12px 16px;background:#fde68a;color:#422006;' +
+        'font:14px/1.6 system-ui,sans-serif">请双击打开同目录下的 <b>opendmr-cps.html</b>（或运行 start.bat）。' +
+        'index.html 是源码，直接打开不能运行。<br>Open <b>opendmr-cps.html</b> next to this file (or run start.bat): ' +
+        'index.html is the source and does not run from disk.</div>');
+}
+</script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

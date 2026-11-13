@@ -1,0 +1,5 @@
+node_modules/
+*.opendmr
+.DS_Store
+opendmr-cps-debug.html
+__pycache__/
