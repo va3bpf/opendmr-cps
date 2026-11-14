@@ -1,5 +1,19 @@
 # Changelog / 版本记录
 
+## 0.5.0 (2026-11-13)
+
+- DMR IDs: the radio shows a DMR caller's callsign and name from this database. Download the list the OpenGD77 CPS
+  uses (ContactLists on GitHub) or open a CSV (that one, or radioid.net's user.csv); keep only the IDs of some
+  countries (their prefixes), 8 to 31 characters each (all the radio shows), the city if wanted;
+  the page shows how many fit, the size and the write time, and the text as the radio shows it. Written as the
+  OpenGD77 CPS writes it (the same bytes, at 0x50000 and 0xD8000); needs an OpenDMR firmware after 0.3.1, which finds
+  it there. Not part of the codeplug file.
+  DMR ID 数据库：电台收到 DMR 呼叫时用它显示对方的呼号和名字。可以下载 OpenGD77 CPS 用的列表（GitHub 上的
+  ContactLists），也可以打开 CSV 文件（这个列表，或 radioid.net 的 user.csv）；
+  可以只保留某些国家的 ID（按开头的国家代码），每条 8 到 31 个字符（电台最多显示这么多），可加城市；页面显示能存多少条、大小、写入时间，
+  以及在电台上的显示效果。写法和 OpenGD77 CPS 完全一样（同样的字节，写在 0x50000 和 0xD8000）；需要 OpenDMR
+  0.3.1 之后的固件才能读到。不包含在码表文件里。
+
 ## 0.4.0 (2026-11-12)
 
 - P25 channels and VFOs (firmware with P25): the mode P25, its NAC (12 bits in hex, 293 by default, F7E receives any)

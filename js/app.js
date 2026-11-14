@@ -9,6 +9,7 @@ import {GROUPS, SETTINGS, SETTINGS_SIZE} from './codeplug/settings.js';
 import {language} from './i18n.js';
 import {VERSION} from './version.js';
 import * as SAT from './codeplug/satellites.js';
+import * as DMR from './codeplug/dmrids.js';
 import * as gb from './gb2312.js';
 
 const FILE_MAGIC = 'OPENDMR-CPS 1\n'; // our codeplug file: this line, then the window image (layout.js IMAGE_SIZE)
@@ -165,7 +166,7 @@ function render() {
     const main = $('content');
     main.replaceChildren();
     ({channels: viewChannels, zones: viewZones, contacts: viewContacts, rxGroups: viewRxGroups, vfo: viewVfo,
-        general: viewGeneral, radioSettings: viewRadioSettings, satellites: viewSatellites})[tab](main);
+        general: viewGeneral, radioSettings: viewRadioSettings, satellites: viewSatellites, dmrIds: viewDmrIds})[tab](main);
 }
 
 function pageHead(title, ...rest) {
@@ -743,6 +744,174 @@ function viewGeneral(main) {
             el('div', {class: 'card form-card'},
                 el('h3', {class: 'card-title'}, 'OpenDMR CPS'),
                 el('dl', {class: 'info'}, el('dt', {}, t('version')), el('dd', {}, 'v' + VERSION)))));
+}
+
+/* ---- the DMR ID database (not in the codeplug: written to the radio on its own) ---- */
+
+const ID_WRITE_SPEED = 9000; // bytes a second over the cable (measured: 300 KB in 32 s)
+let dmrDb = null; // the ID list loaded: {entries, source}
+const dmrIdOptions = {textLength: DMR.DEFAULT_TEXT_LENGTH, withCity: false, prefixes: ''};
+let dmrIdBusy = false;
+
+// The text of a response, the progress bar following its length
+async function fetchText(url) {
+    const r = await fetch(url, {cache: 'no-store'});
+    if (!r.ok) {
+        throw new Error(`HTTP ${r.status} ${(await r.text()).slice(0, 200)}`);
+    }
+    const total = Number(r.headers.get('Content-Length')) || 0;
+    if (!r.body || !total) {
+        return r.text();
+    }
+    const reader = r.body.getReader();
+    const parts = [];
+    let got = 0;
+    for (;;) {
+        const {value, done} = await reader.read();
+        if (done) {
+            break;
+        }
+        parts.push(value);
+        got += value.length;
+        progress(got, total);
+    }
+    progress(0, 0);
+    return new TextDecoder().decode(await new Blob(parts).arrayBuffer());
+}
+
+async function loadDmrIds(source, file) {
+    status(file ? t('idReading') : t('idLoading'));
+    try {
+        const text = file ? await file.text() : await fetchText(DMR.SOURCES[source]);
+        let entries;
+        try {
+            entries = DMR.parseCsv(text);
+        } catch (e) {
+            throw new Error(t('idBadCsv'));
+        }
+        dmrDb = {entries, source: file ? file.name : 'ContactLists'};
+        status(`${t('idLoaded')} ${entries.length} ${t('idEntries')}`);
+    } catch (e) {
+        toast(`${t('error')}: ${e.message}`, 10000);
+        status(t('error'));
+    } finally {
+        progress(0, 0);
+    }
+    render();
+}
+
+function dmrIdPlan() {
+    const o = dmrIdOptions;
+    const prefixes = o.prefixes.split(/[\s,;]+/).filter((p) => /^\d+$/.test(p));
+    const chosen = dmrDb ? DMR.select(dmrDb.entries, prefixes) : [];
+    const cap = DMR.capacity(o.textLength);
+    const count = Math.min(chosen.length, cap);
+    const bytes = DMR.HEADER + (count * DMR.recordLength(o.textLength));
+    return {chosen, cap, count, bytes, minutes: Math.max(1, Math.round(bytes / ID_WRITE_SPEED / 60))};
+}
+
+async function writeDmrIds() {
+    const o = dmrIdOptions;
+    const plan = dmrIdPlan();
+    if (!link?.connected || !plan.count || dmrIdBusy) {
+        return;
+    }
+    if (!window.confirm(t('idWriteConfirm').replace('{n}', plan.count).replace('{m}', plan.minutes))) {
+        return;
+    }
+    const db = DMR.build(plan.chosen, o.textLength, o.withCity);
+    dmrIdBusy = true;
+    $('btnRead').disabled = true;
+    $('btnWrite').disabled = true;
+    render();
+    try {
+        for (let i = 0; i < db.sectors.length; i++) {
+            await link.writeSector(db.sectors[i].sector, db.sectors[i].data);
+            progress(i + 1, db.sectors.length);
+            status(`${t('idWriting')} ${Math.floor(100 * (i + 1) / db.sectors.length)}%`);
+        }
+        await link.closeScreen();
+        status(`${t('idWritten')}: ${db.count} ${t('idEntries')}`);
+        toast(t('idWritten'));
+    } catch (e) {
+        toast(t('error') + ': ' + e.message, 6000);
+        status(t('error'));
+    } finally {
+        progress(0, 0);
+        dmrIdBusy = false;
+        setConnected(!!link?.connected); // the buttons back, the page redrawn
+    }
+}
+
+function viewDmrIds(main) {
+    const o = dmrIdOptions;
+    const plan = dmrIdPlan();
+    const fileInput = el('input', {type: 'file', accept: '.csv,text/csv', hidden: true});
+    fileInput.addEventListener('change', () => {
+        if (fileInput.files[0]) {
+            loadDmrIds(null, fileInput.files[0]);
+        }
+    });
+    const shown = (e) => DMR.radioText(DMR.entryText(e, o.withCity), o.textLength);
+    const mine = plan.chosen.find((e) => e.id === codeplug.general.dmrId);
+    const samples = [...(mine ? [mine] : []), ...plan.chosen.filter((e) => e !== mine).slice(0, mine ? 4 : 5)];
+    const mb = (n) => (n / 1048576).toFixed(1) + ' MB';
+    const prefixInput = el('input', {value: o.prefixes, placeholder: '302 310', spellcheck: false});
+    prefixInput.addEventListener('change', () => {
+        o.prefixes = prefixInput.value.trim();
+        render();
+    });
+    const lengthSelect = select(DMR.TEXT_LENGTHS.map((n) => [n, String(n)]), o.textLength, (v) => {
+        o.textLength = Number(v);
+        render();
+    });
+    main.append(pageHead(t('dmrIds')),
+        el('div', {class: 'general-cards'},
+            el('div', {class: 'card form-card'},
+                el('h3', {class: 'card-title'}, t('idSource')),
+                el('p', {class: 'muted'}, t('idIntro')),
+                el('div', {class: 'id-sources'},
+                    button(t('idDownload'), 'download', () => loadDmrIds('contactLists'), 'primary'),
+                    button(t('idOpenCsv'), 'open', () => fileInput.click()),
+                    fileInput),
+                el('p', {class: 'id-loaded'}, dmrDb ? `${dmrDb.entries.length} ${t('idEntries')} · ${dmrDb.source}`
+                    : t('idNone'))),
+            el('div', {class: 'card form-card'},
+                el('h3', {class: 'card-title'}, t('idOptions')),
+                el('div', {class: 'fields'},
+                    field(t('idTextLength'), lengthSelect),
+                    field(t('idPrefixes'), prefixInput)),
+                el('p', {class: 'muted id-hint'}, t('idPrefixHint')),
+                check(t('idWithCity'), o.withCity, (v) => {
+                    o.withCity = v;
+                    render();
+                })),
+            el('div', {class: 'card form-card'},
+                el('h3', {class: 'card-title'}, t('idSummary')),
+                dmrDb ? el('dl', {class: 'info'},
+                    el('dt', {}, t('idSelected')), el('dd', {}, plan.chosen.length),
+                    el('dt', {}, t('idCapacity')), el('dd', {}, plan.cap),
+                    el('dt', {}, t('idSize')), el('dd', {}, mb(plan.bytes)),
+                    el('dt', {}, t('idTime')), el('dd', {}, plan.count ? t('idMinutes').replace('{m}', plan.minutes) : '–'))
+                    : el('p', {class: 'id-next'}, t('idNoListYet')),
+                (plan.chosen.length > plan.cap) ? el('p', {class: 'id-warn'}, t('idTooMany')) : null,
+                samples.length ? el('div', {class: 'id-preview'},
+                    el('div', {class: 'muted'}, t('idPreview')),
+                    samples.map((e) => el('div', {class: 'id-sample'}, el('span', {class: 'dim'}, e.id), ' ', shown(e))))
+                    : null,
+                el('div', {class: 'id-write'},
+                    // no list yet: the button downloads ContactLists first
+                    el('button', {class: 'primary', disabled: !link?.connected || dmrIdBusy || (dmrDb && !plan.count),
+                        onclick: async () => {
+                            if (!dmrDb) {
+                                await loadDmrIds('contactLists');
+                            }
+                            if (dmrDb) {
+                                await writeDmrIds();
+                            }
+                        }}, icon('upload'), t(dmrDb ? 'idWrite' : 'idDownloadWrite')),
+                    link?.connected ? null : el('span', {class: 'muted'}, t('idConnectFirst'))),
+                el('p', {class: 'muted id-hint'}, t('idFirmwareNote')))));
 }
 
 /* ---- the radio's own settings (its menus) ---- */
@@ -1325,6 +1494,9 @@ function setConnected(on) {
         radio = null;
         showRadio();
         status(t('notConnected'));
+    }
+    if (tab === 'dmrIds') { // its write button and "not connected" follow the link
+        render();
     }
 }
 
