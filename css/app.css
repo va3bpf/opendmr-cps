@@ -362,6 +362,77 @@ dl.info dd { margin: 0; font-variant-numeric: tabular-nums; }
 .id-write { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
 .id-next { margin: 0; line-height: 1.6; }
 
+/* DMR IDs layout */
+.dmr-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-bottom: 24px;
+}
+.dmr-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
+    gap: 20px;
+    align-items: start;
+    max-width: 1320px;
+    width: 100%;
+}
+.dmr-cards .form-card {
+    max-width: 100%;
+}
+
+/* Custom countries picker container */
+.country-picker-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    margin-top: 2px;
+}
+.country-picker-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--muted);
+}
+.country-picker-header a {
+    color: var(--accent);
+    cursor: pointer;
+    text-decoration: underline;
+    margin-left: 8px;
+}
+.field select.country-picker-select,
+select.country-picker-select {
+    height: 280px !important;
+    min-height: 280px !important;
+    padding: 8px 10px;
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    background: var(--panel);
+    color: var(--text);
+    width: 100%;
+    font-family: inherit;
+    font-size: 13px;
+    line-height: 1.4;
+}
+select.country-picker-select optgroup {
+    font-weight: 700;
+    color: var(--accent);
+    padding: 6px 0 2px 2px;
+}
+select.country-picker-select option {
+    padding: 3px 6px;
+    border-radius: 4px;
+    font-weight: normal;
+    color: var(--text);
+}
+select.country-picker-select option:checked {
+    background-color: var(--accent-soft);
+    color: var(--accent-text);
+    font-weight: 600;
+}
+
 /* ---- satellites ---- */
 table.grid td.warn { color: #c2410c; }
 .toolbar-select { font: inherit; height: 34px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 8px;

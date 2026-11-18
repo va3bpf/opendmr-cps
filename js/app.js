@@ -1022,17 +1022,29 @@ async function fetchText(url) {
     return new TextDecoder().decode(await new Blob(parts).arrayBuffer());
 }
 
-async function loadDmrIds(source, file) {
+async function loadDmrIds(source, file, filter = '', sourceName = '') {
     status(file ? t('idReading') : t('idLoading'));
     try {
-        const text = file ? await file.text() : await fetchText(DMR.SOURCES[source]);
         let entries;
-        try {
-            entries = DMR.parseCsv(text);
-        } catch (e) {
-            throw new Error(t('idBadCsv'));
+        if (file) {
+            const text = await file.text();
+            try {
+                entries = DMR.parseCsv(text);
+            } catch (e) {
+                throw new Error(t('idBadCsv'));
+            }
+        } else {
+            // Use serve.py proxy on localhost (avoids Referer issues); fall back to direct API elsewhere
+            const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            const base = isLocal ? '/dmr/database' : DMR.SOURCES.gridRadio;
+            const url = filter ? `${base}?${filter}` : base;
+            const data = JSON.parse(await fetchText(url));
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            entries = DMR.parseJson(data);
         }
-        dmrDb = {entries, source: file ? file.name : 'ContactLists'};
+        dmrDb = {entries, source: file ? file.name : (sourceName || 'Worldwide')};
         oddbCache = null;
         status(`${t('idLoaded')} ${entries.length} ${t('idEntries')}`);
     } catch (e) {
@@ -1189,6 +1201,115 @@ function viewDmrIds(main) {
             loadDmrIds(null, fileInput.files[0]);
         }
     });
+
+    // Region/country selector state (persisted in module-level object to survive re-renders)
+    if (!o.dmrRegion) {
+        o.dmrRegion = '';         // '' = Worldwide
+        o.dmrCountries = [];      // used when region === 'custom'
+    }
+
+    function buildFilter() {
+        if (o.dmrRegion === 'custom') {
+            return o.dmrCountries.length ? 'country=' + encodeURIComponent(o.dmrCountries.join(',')) : '';
+        }
+        if (!o.dmrRegion) {
+            return ''; // Worldwide
+        }
+        const found = DMR.COUNTRY_LIST.find((g) => g.id === o.dmrRegion);
+        return found ? 'country=' + encodeURIComponent(found.countries.join(',')) : '';
+    }
+
+    // Region <select>
+    const regionSel = el('select', {class: 'select'},
+        ...DMR.REGIONS.map((r) => {
+            const opt = el('option', {value: r.id}, r.label);
+            if (r.id === o.dmrRegion) {
+                opt.selected = true;
+            }
+            return opt;
+        }));
+    regionSel.addEventListener('change', () => {
+        o.dmrRegion = regionSel.value;
+        o.dmrCountries = [];
+        render();
+    });
+
+    function regionLabel() {
+        if (o.dmrRegion === 'custom') {
+            if (o.dmrCountries.length === 0) return 'Custom';
+            if (o.dmrCountries.length <= 2) return o.dmrCountries.join(', ');
+            return `${o.dmrCountries.length} countries`;
+        }
+        const found = DMR.REGIONS.find((r) => r.id === o.dmrRegion);
+        return found ? found.label : 'Worldwide';
+    }
+
+    // Download button reference for dynamic state update
+    const dlBtn = button(t('idDownload'), 'download',
+        () => loadDmrIds(null, null, buildFilter(), regionLabel()),
+        o.dmrRegion === 'custom' && o.dmrCountries.length === 0 ? '' : 'primary');
+
+    // Country multi-select (shown as full-width picker below Region when region === 'custom')
+    let countryPicker = null;
+    if (o.dmrRegion === 'custom') {
+        const countrySel = el('select', {
+            class: 'country-picker-select',
+            multiple: true,
+            size: 10,
+            title: t('idHoldCtrl'),
+        });
+        for (const group of DMR.COUNTRY_LIST) {
+            const og = el('optgroup', {label: group.region});
+            for (const c of group.countries) {
+                const opt = el('option', {value: c}, c);
+                if (o.dmrCountries.includes(c)) {
+                    opt.selected = true;
+                }
+                og.append(opt);
+            }
+            countrySel.append(og);
+        }
+
+        const countSpan = el('span', {}, `${o.dmrCountries.length} ${t('idChosen')}`);
+
+        function updateSelection(countries) {
+            o.dmrCountries = countries;
+            for (const opt of countrySel.options) {
+                opt.selected = countries.includes(opt.value);
+            }
+            countSpan.textContent = `${o.dmrCountries.length} ${t('idChosen')}`;
+            dlBtn.className = o.dmrCountries.length === 0 ? '' : 'primary';
+        }
+
+        countrySel.addEventListener('change', () => {
+            o.dmrCountries = [...countrySel.selectedOptions].map((op) => op.value);
+            countSpan.textContent = `${o.dmrCountries.length} ${t('idChosen')}`;
+            dlBtn.className = o.dmrCountries.length === 0 ? '' : 'primary';
+        });
+
+        const selectAllLink = el('a', {
+            onclick: (e) => {
+                e.preventDefault();
+                updateSelection(DMR.COUNTRY_LIST.flatMap((g) => g.countries));
+            }
+        }, t('idSelectAll'));
+
+        const clearLink = el('a', {
+            onclick: (e) => {
+                e.preventDefault();
+                updateSelection([]);
+            }
+        }, t('idClear'));
+
+        const headerInfo = el('div', {class: 'country-picker-header'},
+            el('span', {}, countSpan, el('span', {class: 'muted'}, ` · ${t('idHoldCtrl')}`)),
+            el('span', {}, selectAllLink, ' · ', clearLink));
+
+        countryPicker = el('div', {class: 'country-picker-wrap'},
+            headerInfo,
+            countrySel);
+    }
+
     // as the radio shows a caller: the callsign, the name, the city and state, the country
     const shown = (r) => [r[1], r[2], [r[3], r[4]].filter((s) => s).join(', '), r[5]].filter((s) => s).join(' · ');
     const rows = plan?.rows ?? [];
@@ -1201,46 +1322,44 @@ function viewDmrIds(main) {
         render();
     });
     main.append(pageHead(t('dmrIds')),
-        el('div', {class: 'general-cards'},
-            el('div', {class: 'card form-card'},
-                el('h3', {class: 'card-title'}, t('idSource')),
-                el('p', {class: 'muted'}, t('idIntro')),
-                el('div', {class: 'id-sources'},
-                    button(t('idDownload'), 'download', () => loadDmrIds('contactLists'), 'primary'),
-                    button(t('idOpenCsv'), 'open', () => fileInput.click()),
-                    fileInput),
-                el('p', {class: 'id-loaded'}, dmrDb ? `${dmrDb.entries.length} ${t('idEntries')} · ${dmrDb.source}`
-                    : t('idNone'))),
-            el('div', {class: 'card form-card'},
-                el('h3', {class: 'card-title'}, t('idOptions')),
-                el('div', {class: 'fields'}, field(t('idPrefixes'), prefixInput)),
-                el('p', {class: 'muted id-hint'}, t('idPrefixHint'))),
-            el('div', {class: 'card form-card'},
-                el('h3', {class: 'card-title'}, t('idSummary')),
-                dmrDb ? el('dl', {class: 'info'},
-                    el('dt', {}, t('idSelected')), el('dd', {}, db ? db.records : '–'),
-                    el('dt', {}, t('idCountries')), el('dd', {}, db ? db.countries : '–'),
-                    el('dt', {}, t('idSize')), el('dd', {}, db ? mb(db.body.length + db.header.length) : '–'),
-                    el('dt', {}, t('idTime')), el('dd', {}, db ? t('idMinutesNew').replace('{m}', oddbMinutes(db)) : '–'))
-                    : el('p', {class: 'id-next'}, t('idNoListYet')),
-                plan?.error ? el('p', {class: 'id-warn'}, `${plan.error} ${t('idFewerCountries')}`) : null,
-                samples.length ? el('div', {class: 'id-preview'},
-                    el('div', {class: 'muted'}, t('idPreview')),
-                    samples.map((r) => el('div', {class: 'id-sample'}, el('span', {class: 'dim'}, r[0]), ' ', shown(r))))
-                    : null,
-                el('div', {class: 'id-write'},
-                    // no list yet: the button downloads ContactLists first
-                    el('button', {class: 'primary', disabled: !link?.connected || dmrIdBusy || (dmrDb && !db && !old.count),
-                        onclick: async () => {
-                            if (!dmrDb) {
-                                await loadDmrIds('contactLists');
-                            }
-                            if (dmrDb) {
-                                await writeDmrIds();
-                            }
-                        }}, icon('upload'), t(dmrDb ? 'idWrite' : 'idDownloadWrite')),
-                    link?.connected ? null : el('span', {class: 'muted'}, t('idConnectFirst'))),
-                el('p', {class: 'muted id-hint'}, t('idFirmwareNote')))));
+        el('div', {class: 'dmr-scroll'},
+            el('div', {class: 'dmr-cards'},
+                el('div', {class: 'card form-card'},
+                    el('h3', {class: 'card-title'}, t('idSource')),
+                    el('p', {class: 'muted'}, t('idIntro')),
+                    el('div', {class: 'fields'},
+                        field(t('idRegion'), regionSel, {wide: true}),
+                        countryPicker ? field(t('idCountry'), countryPicker, {wide: true}) : null,
+                        field(t('idPrefixes'), prefixInput, {wide: true, help: t('idPrefixHint')})),
+                    el('div', {class: 'id-sources'},
+                        dlBtn,
+                        button(t('idOpenCsv'), 'open', () => fileInput.click()),
+                        fileInput),
+                    el('p', {class: 'id-loaded'}, dmrDb ? `${dmrDb.entries.length} ${t('idEntries')} · ${dmrDb.source}`
+                        : t('idNone'))),
+                el('div', {class: 'card form-card'},
+                    el('h3', {class: 'card-title'}, t('idSummary')),
+                    dmrDb ? el('dl', {class: 'info'},
+                        el('dt', {}, t('idSelected')), el('dd', {}, db ? db.records : '–'),
+                        el('dt', {}, t('idCountries')), el('dd', {}, db ? db.countries : '–'),
+                        el('dt', {}, t('idSize')), el('dd', {}, db ? mb(db.body.length + db.header.length) : '–'),
+                        el('dt', {}, t('idTime')), el('dd', {}, db ? t('idMinutesNew').replace('{m}', oddbMinutes(db)) : '–'))
+                        : el('p', {class: 'id-next'}, t('idNoListYet')),
+                    plan?.error ? el('p', {class: 'id-warn'}, `${plan.error} ${t('idFewerCountries')}`) : null,
+                    samples.length ? el('div', {class: 'id-preview'},
+                        el('div', {class: 'muted'}, t('idPreview')),
+                        samples.map((r) => el('div', {class: 'id-sample'}, el('span', {class: 'dim'}, r[0]), ' ', shown(r))))
+                        : null,
+                    el('div', {class: 'id-write'},
+                        el('button', {class: 'primary', disabled: !link?.connected || !dmrDb || dmrIdBusy || (!db && !old.count),
+                            onclick: async () => {
+                                if (dmrDb) {
+                                    await writeDmrIds();
+                                }
+                            }}, icon('upload'), t('idWrite')),
+                        !link?.connected ? el('span', {class: 'muted'}, t('idConnectFirst'))
+                            : (!dmrDb ? el('span', {class: 'muted'}, t('idLoadFirst')) : null)),
+                    el('p', {class: 'muted id-hint'}, t('idFirmwareNote'))))));
 }
 
 /* ---- the radio's own settings (its menus) ---- */

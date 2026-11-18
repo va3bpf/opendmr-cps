@@ -23,8 +23,28 @@ const CODE = new Map([...DECOMPRESS].map((c, i) => [c, i]));
 import {COUNTRY_OF_CODE} from './countries.js';
 
 export const SOURCES = {
-    contactLists: 'https://raw.githubusercontent.com/ContactLists/NORMAL-ContactLists/master/RADIODDITY/GD77/GD77_WW_default.csv',
+    gridRadio: 'https://api.grid.radio/opengd77/dmr-database',
 };
+
+// Regions for the selector (matches the grid.radio API's ?region= values)
+export const REGIONS = [
+    {id: '', label: 'Worldwide'},
+    {id: 'europe', label: 'Europe'},
+    {id: 'north-america', label: 'North America'},
+    {id: 'south-america', label: 'South America'},
+    {id: 'asia-pacific', label: 'Asia & Pacific'},
+    {id: 'middle-east-africa', label: 'Middle East & Africa'},
+    {id: 'custom', label: 'Custom countries\u2026'},
+];
+
+// Country list for the custom-countries selector, grouped by region
+export const COUNTRY_LIST = [
+    {id: 'europe', region: 'Europe', countries: ['Albania','Andorra','Armenia','Austria','Azerbaijan','Belarus','Belgium','Bosnia and Hercegovina','Bulgaria','Croatia','Cyprus','Czech Republic','Denmark','Estonia','Faroe Islands','Finland','France','Georgia','Germany','Gibraltar','Greece','Hungary','Iceland','Ireland','Italy','Kosovo','Latvia','Liechtenstein','Lithuania','Luxemburg','Macedonia','Malta','Moldova','Monaco','Montenegro','Netherlands','Norway','Poland','Portugal','Romania','Russia','San Marino','Serbia','Slovakia','Slovenia','Spain','Sweden','Switzerland','Turkiye','Ukraine','United Kingdom','Corsica','Aaland Islands']},
+    {id: 'north-america', region: 'North America', countries: ['Anguilla','Antigua and Barbuda','Aruba','Bahamas','Barbados','Belize','Bermuda','Bonaire','British Virgin Islands','Canada','Cayman Islands','Costa Rica','Cuba','Curacao','Dominica','Dominican Republic','El Salvador','Greenland','Grenada','Guadeloupe','Guatemala','Haiti','Honduras','Jamaica','Martinique','Mexico','Montserrat','Nicaragua','Panama','Puerto Rico','Saint Kitts and Nevis','Saint Lucia','Saint Vincent and the Grenadines','Trinidad and Tobago','U.S. Virgin Islands','United States']},
+    {id: 'south-america', region: 'South America', countries: ['Argentina Republic','Bolivia','Brazil','Chile','Colombia','Ecuador','Falkland Islands','French Guiana','Guyana','Paraguay','Peru','Suriname','Uruguay','Venezuela']},
+    {id: 'asia-pacific', region: 'Asia & Pacific', countries: ['American Samoa','Australia','Bangladesh','Brunei Darussalam','China','Cook Islands','Guam','Hong Kong','India','Indonesia','Japan','Kazakhstan','Kiribati','Korea Republic of','Kyrgyzstan','Laos','Macao','Malaysia','Maldives','Micronesia','Mongolia','Nepal','New Caledonia','New Zealand','Pakistan','Palau','Papua New Guinea','Philippines','Samoa','Singapore','Sri Lanka','Taiwan','Thailand','Timor-Leste','Tonga','Turkmenistan','Tuvalu','Uzbekistan','Vanuatu','Vietnam']},
+    {id: 'middle-east-africa', region: 'Middle East & Africa', countries: ['Bahrain','Cameroon','Egypt','Ethiopia','Ghana','Iran','Iraq','Israel','Jordan','Kenya','Kuwait','Lebanon','Libya','Malawi','Morocco','Mozambique','Nigeria','Oman','Palestine','Qatar','Rwanda','Saudi Arabia','South Africa','Sudan','Tanzania','Tunisia','Uganda','United Arab Emirates','Yemen','Zimbabwe']},
+];
 
 export const compressSize = (n) => (Math.floor(n / 4) * 3) + (n % 4);
 export const recordLength = (textLength) => 3 + compressSize(textLength);
@@ -109,6 +129,28 @@ export function parseCsv(text) {
         });
     }
     return entries;
+}
+
+// Entries from the grid.radio JSON API ({ entries: [{id, callsign, name, firstName, surname, city, state, country}] })
+export function parseJson(data) {
+    return (data.entries || []).map((e) => {
+        const id = Number(e.id);
+        if (!Number.isInteger(id) || id < 1 || id > 0xFFFFFF) {
+            return null;
+        }
+        const name = e.name || [e.firstName || '', e.surname || ''].filter((s) => s).join(' ');
+        const given = e.firstName || e.name || '';
+        const country = e.country || '';
+        return {
+            id,
+            callsign: e.callsign || '',
+            name,
+            given,
+            city: e.city || '',
+            state: e.state || '',
+            country: COUNTRY_OF_CODE[country] ?? country,
+        };
+    }).filter(Boolean);
 }
 
 // The text the radio shows: "CALLSIGN Name" (the callsign large, the rest under it), the city with withCity
