@@ -20,6 +20,10 @@ export const NXDN_RAN_MAX = 63;
 // 0 or no block: the DMR ID
 export const NXDN_ID_BLOCK_TYPE = 0x44540006;
 const NXDN_ID_BLOCK_LENGTH = 4;
+// The radio's interface language (OpenDMR services/language.c, a custom data block "DT" 4): version 1,
+// the language number (0 English, 1 Chinese, 2 Spanish); no block: bit 19 of bitfield_options
+export const LANGUAGE_BLOCK_TYPE = 0x44540004;
+const LANGUAGE_BLOCK_LENGTH = 2;
 // P25's NAC (codeplug.h codeplug_p25_nac()): 12 bits, low 8 in byte 44 (DMR's colour code), high 4 in byte 42 with
 // 0xA0 over them; not tagged (0x00 / 0xFF from the OpenGD77 CPS): 293
 export const P25_NAC_DEFAULT = 0x293;
@@ -235,6 +239,10 @@ export class Codeplug {
         const nxdnBlock = this.findCustomBlock(NXDN_ID_BLOCK_TYPE);
         this.nxdnIdRead = (nxdnBlock && nxdnBlock.length === NXDN_ID_BLOCK_LENGTH && img[nxdnBlock.data] === 1) ?
             (img[nxdnBlock.data + 2] | (img[nxdnBlock.data + 3] << 8)) : 0;
+        const langBlock = this.findCustomBlock(LANGUAGE_BLOCK_TYPE);
+        this.languageRead = (langBlock && langBlock.length === LANGUAGE_BLOCK_LENGTH && img[langBlock.data] === 1 && img[langBlock.data + 1] < 3) ?
+            img[langBlock.data + 1] : this.settings.language;
+        this.settings.language = this.languageRead;
         this.customRanges = []; // the custom data bytes store() changed (and the APRS configurations)
         this.aprsConfigs = []; // {index (1 - 8), ...}
         for (let i = 1; i <= APRS_CONFIGS_MAX; i++) {
@@ -540,6 +548,11 @@ export class Codeplug {
             const id = this.general.nxdnId;
             this.storeCustomBlock(NXDN_ID_BLOCK_TYPE, new Uint8Array([1, 0, id & 0xFF, (id >> 8) & 0xFF]), 'NXDN ID');
             this.nxdnIdRead = id;
+        }
+        if (this.settings.languageDirty || this.settings.language !== this.languageRead) {
+            this.storeCustomBlock(LANGUAGE_BLOCK_TYPE, new Uint8Array([1, this.settings.language]), 'interface language');
+            this.languageRead = this.settings.language;
+            this.settings.languageDirty = false;
         }
         if (this.aprsDirty) { // the APRS configurations: the radio's are written back otherwise
             const byIndex = new Map(this.aprsConfigs.map((c) => [c.index, c]));
