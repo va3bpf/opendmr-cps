@@ -109,7 +109,7 @@ const TEXTS = {
         'Una lista TG admite como máximo 32 contactos'],
     filter: ['筛选', 'Filter', 'Filtro'],
     count: ['数量', 'Count', 'Cantidad'],
-    language: ['English', 'Español', '中文'],
+    language: ['中文', 'English', 'Español'],
     vfo: ['VFO', 'VFO', 'VFO'],
     codeplug: ['码表', 'Codeplug', 'Codeplug'],
     radioSettings: ['电台设置', 'Radio settings', 'Ajustes de radio'],
