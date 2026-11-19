@@ -1320,8 +1320,13 @@ function viewDmrIds(main) {
 
 function viewRadioSettings(main) {
     const s = codeplug.settings;
-    const zh = language() === 'zh';
-    const label = (x) => (Array.isArray(x) ? x[zh ? 1 : 0] : x);
+    const l = language();
+    const label = (x) => {
+        if (!Array.isArray(x)) return x;
+        if (l === 'zh') return x[1];
+        if (l === 'es') return x[2] ?? x[0];
+        return x[0];
+    };
     main.append(pageHead(t('radioSettings')));
     if (!s.valid) {
         main.append(el('div', {class: 'card empty'}, t('settingsInvalid')));
@@ -1333,7 +1338,7 @@ function viewRadioSettings(main) {
     function control(item) {
         const value = s.get(item.id);
         if (item.c) {
-            return select(item.c.map(([v, en, cn]) => [v, zh ? cn : en]), value, (v) => change(item, +v));
+            return select(item.c.map(([v, en, cn, es]) => [v, l === 'zh' ? cn : (l === 'es' ? (es ?? en) : en)]), value, (v) => change(item, +v));
         }
         if (item.input || !item.f) {
             const [lo, hi] = item.n;
@@ -1376,11 +1381,11 @@ function viewRadioSettings(main) {
         const rows = el('div', {class: 'set-rows'});
         for (const item of g.items) {
             const box = el('div', {class: 'set-control'});
-            const row = el('div', {class: 'set-row'}, el('label', {}, zh ? item.zh : item.en), box);
+            const row = el('div', {class: 'set-row'}, el('label', {}, l === 'zh' ? item.zh : (l === 'es' ? (item.es ?? item.en) : item.en)), box);
             controls.push({item, row, box});
             rows.append(row);
         }
-        grid.append(el('div', {class: 'card set-card'}, el('div', {class: 'card-head'}, el('h3', {}, zh ? g.zh : g.en)), rows));
+        grid.append(el('div', {class: 'card set-card'}, el('div', {class: 'card-head'}, el('h3', {}, l === 'zh' ? g.zh : (l === 'es' ? (g.es ?? g.en) : g.en))), rows));
     }
     main.append(el('div', {class: 'settings-scroll'}, grid));
     refresh();

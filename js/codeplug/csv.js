@@ -232,7 +232,7 @@ function frequency(text) {
 
 function bool(text) {
     const t = text.toLowerCase();
-    if (['yes', 'y', 'true', 'on', '1', '是'].includes(t)) {
+    if (['yes', 'y', 'true', 'on', '1', '是', 'si', 'sí', 's'].includes(t)) {
         return true;
     }
     if (['no', 'n', 'false', 'off', '0', '', '否'].includes(t)) {
