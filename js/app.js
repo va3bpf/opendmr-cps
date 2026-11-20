@@ -1003,20 +1003,13 @@ function viewAprs(main) {
         };
         const ssids = Array.from({length: 16}, (_, i) => [i, i]);
         const symbols = aprsSymbols(c.iconTable);
-        const iconOptions = [
-            ...(c.icon < 0 || c.icon >= symbols.length ? [[c.icon, `${t('unknownSymbol')} (${c.icon})`]] : []),
-            ...symbols.map((symbol) => [symbol.value, `${symbol.code} — ${symbol.description}`]),
-        ];
-        let iconControl;
         let symbolChart;
         const changeIcon = (value) => {
             set('icon')(value);
-            iconControl.value = String(value);
             symbolChart.querySelectorAll('button').forEach((cell) => {
                 cell.setAttribute('aria-pressed', String(Number(cell.dataset.value) === value));
             });
         };
-        iconControl = select(iconOptions, c.icon, (v) => changeIcon(+v));
         symbolChart = el('details', {class: 'aprs-symbol-chart'},
             el('summary', {}, t('aprsSymbolChart')),
             el('div', {class: 'aprs-symbol-grid'}, symbols.map((symbol) =>
@@ -1025,7 +1018,7 @@ function viewAprs(main) {
                     title: `${symbol.code}: ${symbol.description}`, onclick: () => changeIcon(symbol.value)},
                 el('span', {class: 'aprs-symbol-character'}, symbol.character),
                 el('span', {class: 'aprs-symbol-code'}, symbol.code)))));
-        const iconPicker = el('div', {class: 'aprs-icon-picker'}, iconControl, symbolChart);
+        const iconPicker = el('div', {class: 'aprs-icon-picker'}, symbolChart);
         drawer.replaceChildren(
             el('div', {class: 'drawer-head'}, el('h3', {}, c.name),
                 iconButton('trash', t('delete'), () => {
