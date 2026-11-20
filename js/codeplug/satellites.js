@@ -124,21 +124,21 @@ export function buildBlock(sats) {
 // CTCSS in Hz x 10 (arm: SO-50's 74.4 Hz to switch its timer on). Our own list, from AMSAT's FM satellite frequency
 // summary (amsat.org, 2026-11) and the operators' pages; satellites come and go: check AMSAT's status page.
 const MHZ = (f) => Math.round(f * 1e6);
-const TEVEL2 = [['TEVEL2-1', '63217'], ['TEVEL2-2', '63219'], ['TEVEL2-3', '63218'], ['TEVEL2-4', '63213'],
-    ['TEVEL2-5', '63214'], ['TEVEL2-6', '63215'], ['TEVEL2-7', '63238'], ['TEVEL2-8', '63239'], ['TEVEL2-9', '63237']];
+const TEVEL2 = [['TEVEL2-3', '63218'], ['TEVEL2-7', '63238']];
 export const PRESETS = [
     // the cross band FM repeater (voice), APRS, and the crew's voice downlink (other: Region 2 / 3 uplink)
     {name: 'ISS', catalog: '25544', voiceRx: MHZ(437.800), voiceTx: MHZ(145.990), ctcss: 670,
-        aprsRx: MHZ(145.825), aprsTx: MHZ(145.825), otherRx: MHZ(145.800), otherTx: MHZ(144.490)},
+        aprsRx: MHZ(437.825), aprsTx: MHZ(437.825), otherRx: MHZ(437.550)},
     {name: 'SO-50', catalog: '27607', voiceRx: MHZ(436.795), voiceTx: MHZ(145.850), ctcss: 670, armCtcss: 744},
-    {name: 'AO-91', catalog: '43017', voiceRx: MHZ(145.960), voiceTx: MHZ(435.250)},
-    {name: 'AO-123', catalog: '61781', voiceRx: MHZ(435.400), voiceTx: MHZ(145.850), ctcss: 670},
-    {name: 'PO-101', catalog: '43678', voiceRx: MHZ(145.900), voiceTx: MHZ(437.500), ctcss: 1413},
+    {name: 'AO-123', catalog: '61781', voiceRx: MHZ(435.400), voiceTx: MHZ(145.850), ctcss: 670, otherRx: MHZ(436.210)},
+    {name: 'JAMX01', catalog: '98248', voiceRx: MHZ(436.500), voiceTx: MHZ(145.950), ctcss: 670, otherRx: MHZ(435.175)},
+    {name: 'SO-131', catalog: 'A1101', voiceRx: MHZ(436.888), voiceTx: MHZ(145.925), otherRx: MHZ(436.888)},
+    {name: 'RS18S', catalog: '67290', voiceRx: MHZ(437.350)},
+    {name: 'RS95S', catalog: '67291', voiceRx: MHZ(436.950), voiceTx: MHZ(145.920), ctcss: 670},
+    {name: 'UmKA-1', catalog: '57172', voiceRx: MHZ(437.625)},
     {name: 'IO-86', catalog: '40931', voiceRx: MHZ(435.880), voiceTx: MHZ(145.880), ctcss: 885},
-    {name: 'LilacSat', catalog: '40908', voiceRx: MHZ(437.200), voiceTx: MHZ(144.350)},
-    {name: 'AO-27', catalog: '22825', voiceRx: MHZ(436.795), voiceTx: MHZ(145.850)},
     // APRS digipeater only (on a schedule)
-    {name: 'SONATE-2', catalog: '59112', aprsRx: MHZ(145.825), aprsTx: MHZ(145.825)},
+    {name: 'SONATE-2', catalog: '59112', aprsRx: MHZ(145.825), aprsTx: MHZ(145.825), otherRx: MHZ(145.840)},
     // one FM transponder at a time where their footprints overlap
     ...TEVEL2.map(([name, catalog]) => ({name, catalog, voiceRx: MHZ(436.400), voiceTx: MHZ(145.970)})),
 ];
@@ -266,7 +266,7 @@ export async function fetchAmateurGroup() {
     } catch (e) {
         // no storage: fetched each time
     }
-    const r = await fetch('https://celestrak.org/NORAD/elements/gp.php?GROUP=amateur&FORMAT=TLE', {cache: 'no-store'});
+    const r = await fetch('https://bh3hni.cn/tle.txt', {cache: 'no-store'});
     const text = await r.text();
     const found = parseTleText(text);
     if (!r.ok || !found.length) {
