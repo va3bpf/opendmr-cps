@@ -11,6 +11,7 @@ import {language} from './i18n.js';
 import {VERSION} from './version.js';
 import * as SAT from './codeplug/satellites.js';
 import * as TH from './codeplug/themes.js';
+import * as BOOT from './codeplug/boot_image.js';
 import {SCREENS, SCREEN_WIDTH, SCREEN_HEIGHT} from './ui/screens.js';
 import * as DMR from './codeplug/dmrids.js';
 import * as ODDB from './codeplug/oddb.js';
@@ -1075,6 +1076,105 @@ function viewAprs(main) {
 
 /* ---- general ---- */
 
+let bootSourceImage = null;
+let bootFitMode = 'cover';
+let bootDither = true;
+
+function bootImageCard() {
+    const canvas = el('canvas', {class: 'theme-screen', width: BOOT.BOOT_WIDTH, height: BOOT.BOOT_HEIGHT,
+        style: 'width:180px;height:240px;border-radius:8px;border:1px solid var(--border);display:block;margin:8px 0'});
+    const tag = el('span', {class: 'tag', style: 'margin-left:8px'});
+    const fileInput = el('input', {type: 'file', accept: 'image/*', hidden: true});
+    const presetBtn = button(t('bootImagePresetLogo'), null, () => {
+        bootSourceImage = null;
+        codeplug.bootImage = BOOT.buildDefaultBlock();
+        codeplug.bootImageDirty = true;
+        if (codeplug.settings.valid && !codeplug.settings.get('bootScreen')) {
+            codeplug.settings.set('bootScreen', 1);
+        }
+        refreshPreview();
+    }, 'ghost');
+    const resetBtn = button(t('bootImageDefault'), null, () => {
+        bootSourceImage = null;
+        codeplug.bootImage = null;
+        codeplug.bootImageDirty = true;
+        refreshPreview();
+    }, 'ghost');
+
+    function recomputeFromSource() {
+        if (!bootSourceImage) {
+            return;
+        }
+        codeplug.bootImage = BOOT.convertImageElementToBlock(bootSourceImage, {fit: bootFitMode, dither: bootDither});
+        codeplug.bootImageDirty = true;
+        if (codeplug.settings.valid && !codeplug.settings.get('bootScreen')) {
+            codeplug.settings.set('bootScreen', 1);
+        }
+        refreshPreview();
+    }
+
+    function refreshPreview() {
+        if (codeplug.bootImage) {
+            BOOT.renderBlockToCanvas(codeplug.bootImage, canvas);
+        } else {
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#07131F';
+            ctx.fillRect(0, 0, BOOT.BOOT_WIDTH, BOOT.BOOT_HEIGHT);
+            ctx.fillStyle = '#8FB0C9';
+            ctx.textAlign = 'center';
+            ctx.font = '13px system-ui, sans-serif';
+            ctx.fillText(t('bootImageBuiltinTag'), BOOT.BOOT_WIDTH / 2, BOOT.BOOT_HEIGHT / 2);
+        }
+        tag.textContent = codeplug.bootImage ? t('bootImageCustomTag') : t('bootImageBuiltinTag');
+        resetBtn.disabled = !codeplug.bootImage;
+    }
+
+    fileInput.addEventListener('change', () => {
+        const file = fileInput.files[0];
+        fileInput.value = '';
+        if (!file) {
+            return;
+        }
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+            URL.revokeObjectURL(url);
+            bootSourceImage = img;
+            recomputeFromSource();
+            toast(t('bootImageLoaded'));
+        };
+        img.onerror = () => {
+            URL.revokeObjectURL(url);
+            toast(t('bootImageBad'));
+        };
+        img.src = url;
+    });
+
+    const fitSelect = select([['cover', t('bootImageCover')], ['contain', t('bootImageContain')]], bootFitMode, (v) => {
+        bootFitMode = v;
+        recomputeFromSource();
+    });
+    const ditherCheck = check(t('bootImageDither'), bootDither, (v) => {
+        bootDither = v;
+        recomputeFromSource();
+    });
+
+    refreshPreview();
+
+    return el('div', {class: 'card form-card'},
+        el('h3', {class: 'card-title'}, t('bootImageTitle'), tag),
+        el('p', {class: 'muted'}, t('bootImageIntro')),
+        canvas,
+        el('div', {class: 'fields'},
+            field(t('bootImageFit'), fitSelect),
+            ditherCheck),
+        el('div', {class: 'id-sources', style: 'margin-top:8px'},
+            button(t('bootImageChoose'), 'open', () => fileInput.click(), 'primary'),
+            presetBtn,
+            resetBtn,
+            fileInput));
+}
+
 function viewGeneral(main) {
     const g = codeplug.general;
     const info = radio ? [
@@ -1092,6 +1192,7 @@ function viewGeneral(main) {
                     field(t('dmrId'), valueInput(g.dmrId, (v) => (g.dmrId = v), intRange(0, 16777215))),
                     field(t('nxdnId'), valueInput(g.nxdnId || '', (v) => (g.nxdnId = v || 0),
                         (s) => (s === '' ? 0 : intRange(1, 65535)(s)), (v) => v || ''), {help: 'helpNxdnId'}))),
+            bootImageCard(),
             el('div', {class: 'card form-card'},
                 el('h3', {class: 'card-title'}, t('radioInfo')),
                 info ? el('dl', {class: 'info'}, info.flatMap(([k, v]) => [el('dt', {}, k), el('dd', {}, v)]))
