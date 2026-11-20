@@ -23,6 +23,7 @@ Current version **0.11.0** ([changelog](CHANGELOG.md)).
 - Interface languages: the languages of the OpenDMR zip's languages folder (Chinese, Spanish, ...) and the
   fonts they need, written to the radio (OpenDMR 0.8.0 and later)
 - 中文 / English / Español interface, dark mode
+- Choose APRS symbols from the standard primary `/` and alternate `\` tables; the radio's original symbol codes remain unchanged when reading and writing
 
 ## Use
 
