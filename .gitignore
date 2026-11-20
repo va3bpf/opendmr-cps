@@ -3,3 +3,5 @@ node_modules/
 .DS_Store
 opendmr-cps-debug.html
 __pycache__/
+dist/
+firmware/*.bin

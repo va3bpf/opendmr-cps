@@ -1,5 +1,45 @@
 # Changelog / 版本记录
 
+## 0.10.1 (2026-11-20)
+
+- The APRS symbol list (94 symbols) and the update program's backlight fix, in a build whose version says so
+  (the sidebar's foot): two older single-file pages were still around and looked the same.
+
+## 0.10.0 (2026-11-19)
+
+- Flasher page (new): firmware update over the programming cable without the PTT + SK1 upgrade mode (the same
+  protocol as tools/debug/fw_update.py, now in the browser), and the three backups of the radio: the codeplug and
+  settings, the program flash (firmware and bootloader) and the whole 16 MB data flash (codeplug, settings, satellites
+  and the factory calibration sector), read through the chip bootloader as tools/backup/dm32_dump.py does. A backup
+  can be written back from the page; the sectors that differ only are written, then all compared. The radio-side
+  programs (update program and flash reader) are read from `assets/` when the page is served from a folder, or from
+  identical copies embedded in the page when opened from disk; the page offers them as downloads (`updater.bin`,
+  `dumper.bin`) and links to the OpenDMR releases for `opendmr.bin`.
+- Flasher, the three ways to write, now apart: **Update** (only the sectors that differ), **Install / rewrite all**
+  (every sector of the firmware area) and **Bootloader** (radio off, then on): install OpenDMR on a stock radio
+  (`opendmr.bin`, written from 0xC000) and back to factory (the radio's own program flash backup, and the data flash
+  one if wanted). The factory buttons check they get the right file.
+- APRS: the symbol is chosen from a list (94 symbols, 0x21..0x7E, with their names) instead of typing the character;
+  the same list in the primary and alternate tables. Ported from the CPS that shipped with the web installer.
+- The radio's screen is lit while it updates: the update program now turns the backlight on at 100 % (the firmware
+  may have left it on PWM0 at the night brightness, and the screen was drawn but stayed dark). The flash reader
+  already did it.
+- The Flasher tab is the first in the sidebar. While it works, a panel at the top says what it is doing and how far
+  it is (and the log keeps it), and the radio's own screen shows the same: its title, "Do not power off" and the
+  percentage, in the update and in the bootloader reads and writes (`js/radio/screen.js`, the `T` pictures the
+  scripts drew with Pillow).
+- The page in three steps, in order: **1 make the backups**, **2 install or update** (with the radio-side programs
+  no longer offered for download: they are inside the page) and **3 back to the stock firmware**; plus a **Log** card
+  with the time of every step (could not copy: save it to a file).
+- With nothing to look for: the package's page carries the firmware (`window.__OPENDMR_FIRMWARE`, put there by
+  `tools/web/make_package.py`), and a page served from a folder reads `firmware/index.json`, so "Update" and
+  "Install / rewrite all" work without a file picker; "Use another file…" stays for another version. The firmware
+  folder comes from the latest release (`--firmware` to give another).
+  刷写页（新）：不用 PTT + SK1 升级模式，直接通过写频线更新固件（和 tools/debug/fw_update.py 同一套协议，现在在浏览器里）；
+  以及三份备份：码表和设置、程序 Flash（固件和引导程序）、整块 16 MB 数据 Flash（码表、设置、卫星和出厂校准扇区），走芯片引导程序，
+  和 tools/backup/dm32_dump.py 一样。备份可以在页面里写回：只写不同的扇区，写完全部校验。电台端的程序（更新程序、读 Flash 程序）
+  在文件夹里用 `assets/` 的文件，从磁盘打开时用内置的同一份；页面上也可以把这两个文件下载下来，并给了 `opendmr.bin` 的发布页链接。
+
 ## 0.9.0 (2026-11-19)
 
 - Themes page: make your own colour themes for the radio (up to 8), recolour a built-in theme or hide it from the
