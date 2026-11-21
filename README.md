@@ -15,8 +15,11 @@
 - 用写频线直接读写电台；只写有改动的部分，电台自己的其他设置不会被覆盖
 - 码表文件保存 / 打开
 - CSV 导入 / 导出，格式和 OpenGD77 CPS 一样（信道、区域、联系人、TG 列表、APRS），可以直接导入 OpenGD77 的 CSV，也可以把别的软件的信道表改成这个格式导入（[说明](docs/csv.md)）
-- 电台主题：新建自己的配色、给自带主题改色或隐藏，在电台自己的屏幕上预览（OpenDMR 0.6.0 及以后）
 - 中文 / English / Español 界面，深色模式
+- 电台主题：新建自己的配色、给自带主题改色或隐藏，在电台自己的屏幕上预览（OpenDMR 0.6.0 及以后）
+- APRS 图标按标准主表 / 和副表 \\ 选择，仍以电台原始符号码读写
+
+APRS 图标说明采用 [aprs-symbol-index](https://github.com/hessu/aprs-symbol-index)，作者 Hessu Hannikainen，许可 CC BY-SA 4.0。
 
 ## 使用
 

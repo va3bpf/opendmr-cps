@@ -4,6 +4,7 @@ import {t, applyTexts, toggleLanguage} from './i18n.js';
 import {icon, applyIcons} from './icons.js';
 import {Codeplug, MODES, P25_NAC_ANY, NXDN_RAN_MAX, M17_CAN_MAX, CALL_TYPES, POWER_LEVELS, STEPS_HZ, toneChoices, frequencyValid, LOCKOUTS_MAX,
     TA_TX, APRS_CONFIGS_MAX, newAprsConfig} from './codeplug/codeplug.js';
+import {aprsSymbols} from './codeplug/aprs-symbols.js';
 import * as L from './codeplug/layout.js';
 import {RadioLink} from './radio/link.js';
 import {GROUPS, SETTINGS, SETTINGS_SIZE} from './codeplug/settings.js';
@@ -989,15 +990,33 @@ function viewAprs(main) {
         const set = (k, redraw = false) => (v) => {
             c[k] = v;
             touched();
+            const oldRow = c.row;
             const fresh = row(c);
             fresh.classList.add('selected');
-            c.row.replaceWith(fresh);
+            oldRow.replaceWith(fresh);
             drawer.querySelector('h3').textContent = c.name;
             if (redraw) {
                 openDrawer();
             }
         };
         const ssids = Array.from({length: 16}, (_, i) => [i, i]);
+        const symbols = aprsSymbols(c.iconTable);
+        let symbolChart;
+        const changeIcon = (value) => {
+            set('icon')(value);
+            symbolChart.querySelectorAll('button').forEach((cell) => {
+                cell.setAttribute('aria-pressed', String(Number(cell.dataset.value) === value));
+            });
+        };
+        symbolChart = el('details', {class: 'aprs-symbol-chart'},
+            el('summary', {}, t('aprsSymbolChart')),
+            el('div', {class: 'aprs-symbol-grid'}, symbols.map((symbol) =>
+                el('button', {type: 'button', class: 'aprs-symbol-cell', 'data-value': symbol.value,
+                    'aria-label': `${symbol.code}: ${symbol.description}`, 'aria-pressed': String(c.icon === symbol.value),
+                    title: `${symbol.code}: ${symbol.description}`, onclick: () => changeIcon(symbol.value)},
+                el('span', {class: 'aprs-symbol-character'}, symbol.character),
+                el('span', {class: 'aprs-symbol-code'}, symbol.code)))));
+        const iconPicker = el('div', {class: 'aprs-icon-picker'}, symbolChart);
         drawer.replaceChildren(
             el('div', {class: 'drawer-head'}, el('h3', {}, c.name),
                 iconButton('trash', t('delete'), () => {
@@ -1021,9 +1040,8 @@ function viewAprs(main) {
                 field(t('via2'), asciiInput(c.via2, 6, set('via2')), {help: 'helpVia2'}),
                 field('SSID', select(ssids, c.via2Ssid, (v) => set('via2Ssid')(+v)), {help: 'helpViaSsid'}),
                 field(t('iconTable'), select([[0, t('iconPrimary')], [1, t('iconAlternate')]], c.iconTable,
-                    (v) => set('iconTable')(+v)), {help: 'helpIconTable'}),
-                field(t('aprsIcon'), valueInput(c.icon, set('icon'), (s) => ((s.length === 1 && s >= '!' && s <= '~') ?
-                    s.charCodeAt(0) - 33 : null), (v) => String.fromCharCode(v + 33)), {help: 'helpAprsIcon'}),
+                    (v) => set('iconTable', true)(+v)), {help: 'helpIconTable'}),
+                field(t('aprsIcon'), iconPicker, {wide: true, help: 'helpAprsIcon'}),
                 field(t('comment'), asciiInput(c.comment, 24, set('comment'), false), {wide: true, help: 'helpComment'}),
                 field(t('baud'), select([[0, '1200'], [1, '300']], c.baud300 ? 1 : 0, (v) => set('baud300')(v === '1')),
                     {help: 'helpBaud'}),

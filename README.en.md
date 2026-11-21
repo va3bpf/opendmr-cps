@@ -18,9 +18,12 @@ Current version **0.10.0** ([changelog](CHANGELOG.md)).
   settings stay as they are
 - CSV import / export in the OpenGD77 CPS's format (channels, zones, contacts, TG lists, APRS): OpenGD77's CSV files
   import as they are, a channel list from another CPS edited into this format too ([how](docs/csv.en.md))
+- 中文 / English / Español interface, dark mode
 - Radio themes: your own colours, the built-in ones recoloured or hidden, previewed on the radio's own screens
   (OpenDMR 0.6.0 and later)
-- 中文 / English / Español interface, dark mode
+- Choose APRS symbols from the standard primary `/` and alternate `\` tables; the radio's original symbol codes remain unchanged when reading and writing
+
+APRS symbol descriptions are based on [aprs-symbol-index](https://github.com/hessu/aprs-symbol-index) by Hessu Hannikainen, licensed under CC BY-SA 4.0.
 
 ## Use
 
