@@ -8,6 +8,7 @@ import * as gb from '../gb2312.js';
 import {RadioSettings} from './settings.js';
 import * as SAT from './satellites.js';
 import * as TH from './themes.js';
+import * as BOOT from './boot_image.js';
 
 export const MODES = ['FM', 'DMR', 'P25', 'NXDN', 'M17', 'AM', 'USB', 'LSB'];
 export const DIGITAL_MODES = ['DMR', 'P25', 'NXDN', 'M17'];
@@ -243,6 +244,11 @@ export class Codeplug {
         this.themes = TH.readThemes(themeBlock ? img.subarray(themeBlock.data, themeBlock.data + themeBlock.length) : null);
         this.hadThemeBlock = !!themeBlock;
         this.themesDirty = false;
+        const bootBlock = this.findCustomBlock(BOOT.BOOT_IMAGE_BLOCK_TYPE);
+        const bootBytes = bootBlock ? img.slice(bootBlock.data, bootBlock.data + bootBlock.length) : null;
+        this.bootImage = BOOT.isValidBootImageBlock(bootBytes) ? bootBytes : null;
+        this.hadBootImageBlock = !!bootBlock;
+        this.bootImageDirty = false;
         const nxdnBlock = this.findCustomBlock(NXDN_ID_BLOCK_TYPE);
         this.nxdnIdRead = (nxdnBlock && nxdnBlock.length === NXDN_ID_BLOCK_LENGTH && img[nxdnBlock.data] === 1) ?
             (img[nxdnBlock.data + 2] | (img[nxdnBlock.data + 3] << 8)) : 0;
@@ -562,6 +568,15 @@ export class Codeplug {
                 this.hadThemeBlock = true;
             }
             this.themesDirty = false;
+        }
+        if (this.bootImageDirty) {
+            if (this.bootImage) {
+                this.storeCustomBlock(BOOT.BOOT_IMAGE_BLOCK_TYPE, this.bootImage, 'boot image');
+                this.hadBootImageBlock = true;
+            } else if (this.hadBootImageBlock) {
+                this.storeCustomBlock(BOOT.BOOT_IMAGE_BLOCK_TYPE, new Uint8Array(BOOT.BOOT_IMAGE_BLOCK_LENGTH).fill(0xFF), 'boot image');
+            }
+            this.bootImageDirty = false;
         }
         if (this.general.nxdnId !== this.nxdnIdRead) { // no block made for "not set" unless one was there
             const id = this.general.nxdnId;
