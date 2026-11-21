@@ -34,9 +34,8 @@ export const GROUPS = [
             when: (g) => g('apo') !== 0},
         {id: 'satellite', en: 'Satellite', zh: '卫星', es: 'Satélite', o: 36, s: 4, b: [9, 1], c: [[0, 'Manual', '手动', 'Manual'], [1, 'Auto', '自动', 'Automático']]},
         {id: 'gps', en: 'GPS', zh: 'GPS', es: 'GPS', o: 106, s: 1, c: [[0, 'Not detected', '未检测到', 'No detectado'], [1, 'Off', '关', 'Desactivado'], [2, 'On', '开', 'Activado'], [3, 'NMEA', 'NMEA', 'NMEA']]},
-        {id: 'language', en: 'Language', zh: '语言', es: 'Idioma', o: 36, s: 4, b: [19, 1], c: [
-            [0, 'English', 'English', 'English'], [1, '中文', '中文', '中文'], [2, 'Español', '西班牙语', 'Español'],
-        ]},
+        // a language code: English, or a language file in the radio (the Languages page); the page builds its list
+        {id: 'language', en: 'Language', zh: '语言', es: 'Idioma', o: 36, s: 4, b: [19, 1], language: true},
     ]},
     {key: 'radio', en: 'Radio', zh: '电台', es: 'Radio', items: [
         {id: 'bandLimits', en: 'Band limits', zh: '频段限制', es: 'Límites de banda', o: 79, s: 1, c: [[0, 'Off', '关', 'Desactivado'], [1, 'On', '开', 'Activado'], [2, 'CPS', 'CPS', 'CPS']]},
@@ -120,7 +119,7 @@ export class RadioSettings {
         this.languageDirty = false;
         const item = BY_ID.get('language');
         const v = this.field(item);
-        this.language = (Math.floor(v / (2 ** item.b[0])) & item.b[1]);
+        this.language = (Math.floor(v / (2 ** item.b[0])) & item.b[1]) ? 'zh' : 'en'; // bit 19: Chinese
     }
 
     get valid() {
@@ -161,7 +160,7 @@ export class RadioSettings {
 
     set(id, value) {
         if (id === 'language') {
-            const v = Number(value);
+            const v = String(value);
             this.language = v;
             this.languageDirty = true;
             this.dirty = true;
@@ -170,7 +169,7 @@ export class RadioSettings {
             const [shift, mask] = item.b;
             const word = this.field(item);
             const unit = 2 ** shift;
-            const bit = (v === 1 ? 1 : 0);
+            const bit = (v === 'zh' ? 1 : 0);
             const updated = (word - ((Math.floor(word / unit) & mask) * unit)) + (bit * unit);
             this.setField(item, updated);
             return;

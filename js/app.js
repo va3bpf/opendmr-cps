@@ -15,6 +15,7 @@ import * as BOOT from './codeplug/boot_image.js';
 import {SCREENS, SCREEN_WIDTH, SCREEN_HEIGHT} from './ui/screens.js';
 import * as DMR from './codeplug/dmrids.js';
 import * as ODDB from './codeplug/oddb.js';
+import * as LG from './codeplug/languages.js';
 import * as gb from './gb2312.js';
 import * as CSV from './codeplug/csv.js';
 import {makeZip, readZip, isZip} from './codeplug/zip.js';
@@ -233,7 +234,7 @@ function render() {
     main.replaceChildren();
     ({channels: viewChannels, zones: viewZones, contacts: viewContacts, rxGroups: viewRxGroups, vfo: viewVfo,
         general: viewGeneral, radioSettings: viewRadioSettings, satellites: viewSatellites, dmrIds: viewDmrIds,
-        lockouts: viewLockouts, aprs: viewAprs, debug: viewDebug, themes: viewThemes})[tab](main);
+        lockouts: viewLockouts, aprs: viewAprs, debug: viewDebug, themes: viewThemes, languages: viewLanguages})[tab](main);
 }
 
 function pageHead(title, ...rest) {
@@ -1450,6 +1451,9 @@ function viewRadioSettings(main) {
 
     function control(item) {
         const value = s.get(item.id);
+        if (item.language) { // a code: English or a language file in the radio (the Languages page)
+            return select(languageChoices(value), value, (v) => change(item, v));
+        }
         if (item.c) {
             return select(item.c.map(([v, en, cn, es]) => [v, l === 'zh' ? cn : (l === 'es' ? (es ?? en) : en)]), value, (v) => change(item, +v));
         }
@@ -1502,6 +1506,319 @@ function viewRadioSettings(main) {
     }
     main.append(el('div', {class: 'settings-scroll'}, grid));
     refresh();
+}
+
+/* ---- the radio's interface languages and fonts (OpenDMR docs/i18n.md) ---- */
+
+// The files the user chose (the languages folder of the OpenDMR zip: zh.json, es.json, cjk.bin, or single files). {languages: [{file, doc, errors, warnings, ticked}], fonts: [{file, bytes, name, error}]}
+let langSet = null;
+let radioLangs = null; // what the radio has: {slots: [header or null] x 8, fonts: [directory entries]}; null: not read
+let langBusy = false;
+
+function loadLangFiles(files) { // {file name: Uint8Array}
+    const english = files['en.json'] ? JSON.parse(new TextDecoder().decode(files['en.json'])) : null;
+    const set = {languages: [], fonts: []};
+    for (const [file, bytes] of Object.entries(files)) {
+        if (/\.json$/i.test(file) && file !== 'en.json') {
+            let doc = null;
+            let result;
+            try {
+                doc = JSON.parse(new TextDecoder().decode(bytes));
+                result = LG.checkLanguage(doc, english);
+            } catch (e) {
+                result = {errors: [e.message], warnings: []};
+            }
+            set.languages.push({file, doc, ...result,
+                ticked: !result.errors.length && LG.DEFAULT_TICKED.includes(doc?.code)});
+        } else if (/\.bin$/i.test(file)) {
+            set.fonts.push({file, bytes, ...LG.checkFont(bytes)});
+        }
+    }
+    set.languages.sort((a, b) => a.file.localeCompare(b.file));
+    return set;
+}
+
+async function pickLangFiles(fileList) {
+    const files = {};
+    for (const f of fileList) {
+        if (/\.(json|bin)$/i.test(f.name)) {
+            files[f.name] = new Uint8Array(await f.arrayBuffer());
+        }
+    }
+    langSet = loadLangFiles(files);
+    render();
+}
+
+async function readRadioLangs() {
+    const slots = [];
+    for (let i = 0; i < LG.SLOTS; i++) {
+        const h = await link.readLanguageArea(LG.LANGUAGE_ADDRESS + (i * LG.SLOT_SIZE), 92);
+        if (h === null) {
+            return null; // a firmware before language files
+        }
+        slots.push(LG.parseSlotHeader(h, i));
+    }
+    const dir = await link.readLanguageArea(LG.FONT_DIRECTORY, 12 + (LG.FONTS_MAX * 20));
+    return {slots, fonts: LG.parseDirectory(dir)};
+}
+
+async function refreshRadioLangs() {
+    if (!link?.connected || langBusy) {
+        return;
+    }
+    langBusy = true;
+    try {
+        radioLangs = await readRadioLangs();
+        if (radioLangs === null) {
+            radioLangs = {old: true, slots: [], fonts: []};
+        }
+    } catch (e) {
+        toast(t('error') + ': ' + e.message, 6000);
+    } finally {
+        langBusy = false;
+        render();
+    }
+}
+
+// The radio's languages for the settings page's list: English, the ones in the radio, the one set
+function languageChoices(current) {
+    const out = new Map([['en', 'English']]);
+    for (const s of radioLangs?.slots ?? []) {
+        if (s && !out.has(s.code)) {
+            out.set(s.code, s.name || s.englishName);
+        }
+    }
+    for (const [code, name] of Object.entries(LG.NAMES)) {
+        if (!out.has(code)) {
+            out.set(code, name);
+        }
+    }
+    if (!out.has(current)) {
+        out.set(current, current);
+    }
+    return [...out];
+}
+
+async function writeSectors(address, data, done, total) {
+    for (let at = 0; at < data.length; at += LG.SECTOR) {
+        await link.writeVerifiedSector((address + at) / LG.SECTOR, data.subarray(at, at + LG.SECTOR), (baud) => {
+            status(t('idRetrySlower').replace('{baud}', baud));
+        }, true);
+        done.n += 1;
+        progress(done.n, total);
+        status(`${t('langWriting')} ${Math.floor(100 * done.n / total)}% (${link.baud} baud)`);
+    }
+}
+
+async function writeLanguages() {
+    if (!link?.connected || langBusy || !langSet) {
+        return;
+    }
+    const chosen = langSet.languages.filter((l) => l.ticked && !l.errors.length);
+    if (!chosen.length) {
+        return;
+    }
+    langBusy = true;
+    let started = false;
+    $('btnRead').disabled = true;
+    $('btnWrite').disabled = true;
+    render();
+    try {
+        const now = await readRadioLangs(); // at 115200: long replies are not safe faster on some cables
+        if (now === null) {
+            throw new Error(t('langOldFirmware'));
+        }
+        // the fonts the chosen languages need, unless the radio has the same
+        let fonts = now.fonts;
+        const fontJobs = [];
+        const lacking = chosen.filter((l) => l.doc.font && !fonts.some((f) => f.name === l.doc.font) &&
+            !langSet.fonts.some((f) => f.name === l.doc.font && !f.error));
+        if (lacking.length && !window.confirm(lacking.map((l) => t('langFontAsk').replace('{lang}', l.doc.name)
+            .replaceAll('{font}', `${l.doc.font}.bin`)).join('\n'))) {
+            return;
+        }
+        for (const name of new Set(chosen.map((l) => l.doc.font).filter((f) => f))) {
+            const file = langSet.fonts.find((f) => f.name === name && !f.error);
+            const there = fonts.find((f) => f.name === name);
+            if (!file) {
+                continue;
+            }
+            if (!there || there.length !== file.bytes.length || there.crc !== ODDB.crc32(file.bytes)) {
+                fontJobs.push(file);
+            }
+        }
+        // the languages: into the slot of the same code, else an empty one; left when the radio has the same
+        const slots = [...now.slots];
+        const langJobs = [];
+        for (const l of chosen) {
+            const data = LG.buildSlot(l.doc);
+            const crc = new DataView(data.buffer).getUint32(12, true);
+            let slot = slots.findIndex((s) => s?.code === l.doc.code);
+            if (slot >= 0 && slots[slot].length === data.length && slots[slot].crc === crc) {
+                continue;
+            }
+            if (slot < 0) {
+                slot = slots.findIndex((s) => !s);
+            }
+            if (slot < 0) {
+                throw new Error(t('langNoSlot'));
+            }
+            slots[slot] = {code: l.doc.code};
+            langJobs.push({slot, data: LG.pad(data)});
+        }
+        const total = fontJobs.reduce((n, f) => n + (LG.pad(f.bytes).length / LG.SECTOR) + 2, 0) +
+            langJobs.reduce((n, j) => n + (j.data.length / LG.SECTOR), 0);
+        if (!total) {
+            toast(t('langUpToDate'));
+            return;
+        }
+        started = true;
+        const done = {n: 0};
+        await link.speedUp(0);
+        for (const f of fontJobs) {
+            // out of the directory while it is rewritten: the radio does not draw from half a font
+            fonts = fonts.filter((x) => x.name !== f.name);
+            await writeSectors(LG.FONT_DIRECTORY, LG.buildDirectory(fonts), done, total);
+            const address = LG.placeFont(fonts, f.bytes.length);
+            if (address === null) {
+                throw new Error(t('langNoRoom').replaceAll('{font}', f.name));
+            }
+            await writeSectors(address, LG.pad(f.bytes), done, total);
+            fonts = [...fonts, {name: f.name, address, length: f.bytes.length, crc: ODDB.crc32(f.bytes)}];
+            await writeSectors(LG.FONT_DIRECTORY, LG.buildDirectory(fonts), done, total);
+        }
+        for (const j of langJobs) {
+            // the header's sector last: cut half way, the slot is not used
+            const address = LG.LANGUAGE_ADDRESS + (j.slot * LG.SLOT_SIZE);
+            await writeSectors(address + LG.SECTOR, j.data.subarray(LG.SECTOR), done, total);
+            await writeSectors(address, j.data.subarray(0, LG.SECTOR), done, total);
+        }
+        await link.reloadLanguages();
+        status(t('langWritten'));
+        toast(t('langWritten'));
+    } catch (e) {
+        toast(t('error') + ': ' + e.message, 8000);
+        status(t('error'));
+    } finally {
+        progress(0, 0);
+        try {
+            if (started && link?.connected) {
+                await link.speedDown();
+                await link.closeScreen();
+            }
+            if (link?.connected) {
+                radioLangs = await readRadioLangs() ?? {old: true, slots: [], fonts: []};
+            }
+        } catch (e) {
+            // the port went away
+        }
+        langBusy = false;
+        setConnected(!!link?.connected);
+    }
+}
+
+async function deleteFromRadio(kind, what) {
+    if (!link?.connected || langBusy || !window.confirm(t('langDeleteAsk').replace('{name}', what))) {
+        return;
+    }
+    langBusy = true;
+    render();
+    try {
+        if (kind === 'language') {
+            const s = radioLangs.slots.find((x) => x?.code === what);
+            await link.writeVerifiedSector((LG.LANGUAGE_ADDRESS + (s.slot * LG.SLOT_SIZE)) / LG.SECTOR,
+                new Uint8Array(LG.SECTOR).fill(0xFF), null, true);
+        } else {
+            await link.writeVerifiedSector(LG.FONT_DIRECTORY / LG.SECTOR,
+                LG.buildDirectory(radioLangs.fonts.filter((f) => f.name !== what)), null, true);
+        }
+        await link.reloadLanguages();
+        await link.closeScreen();
+        radioLangs = await readRadioLangs();
+    } catch (e) {
+        toast(t('error') + ': ' + e.message, 6000);
+    } finally {
+        langBusy = false;
+        render();
+    }
+}
+
+function viewLanguages(main) {
+    if (!langSet) {
+        langSet = loadLangFiles({}); // the user chooses the languages folder of the OpenDMR zip
+    }
+    if (link?.connected && !radioLangs && !langBusy) {
+        refreshRadioLangs();
+    }
+    const folderInput = el('input', {type: 'file', webkitdirectory: true, hidden: true});
+    const filesInput = el('input', {type: 'file', accept: '.json,.bin', multiple: true, hidden: true});
+    for (const input of [folderInput, filesInput]) {
+        input.addEventListener('change', () => pickLangFiles(input.files));
+    }
+    const fontState = (name) => {
+        if (!name) {
+            return t('langNoFontNeeded');
+        }
+        if (radioLangs?.fonts.some((f) => f.name === name)) {
+            return `${t('langFont')} ${name}: ${t('langFontInRadio')}`;
+        }
+        return langSet.fonts.some((f) => f.name === name && !f.error) ? `${t('langFont')} ${name}: ${t('langFontWritten')}`
+            : `${t('langFont')} ${name}: ${t('langFontNotHere')}`;
+    };
+    // needs a font the radio does not have and none was chosen: written, it shows "??"
+    const fontLacking = (name) => !!name && !radioLangs?.fonts.some((f) => f.name === name) &&
+        !langSet.fonts.some((f) => f.name === name && !f.error);
+    const fontWarning = (doc) => (fontLacking(doc.font) ?
+        el('p', {class: 'id-warn'}, t('langFontAsk').replace('{lang}', doc.name).replaceAll('{font}', `${doc.font}.bin`)) : null);
+    const rows = langSet.languages.map((l) => el('div', {class: 'lang-row'},
+        check(l.doc ? `${l.doc.name} · ${l.doc.english_name} (${l.doc.code})` : l.file, l.ticked && !l.errors.length, (v) => {
+            l.ticked = v;
+            render();
+        }),
+        el('div', {class: 'muted'}, l.errors.length ? l.errors.slice(0, 3).join('; ') :
+            [`${Object.keys(l.doc.strings).length} ${t('langStrings')}`, fontState(l.doc.font), ...l.warnings.slice(0, 1)].join(' · ')),
+        (l.ticked && !l.errors.length) ? fontWarning(l.doc) : null));
+    for (const f of langSet.fonts.filter((x) => x.error)) {
+        rows.push(el('div', {class: 'lang-row'}, el('div', {}, f.file), el('div', {class: 'muted'}, f.error)));
+    }
+    const kb = (n) => `${Math.round(n / 1024)} KB`;
+    const used = (radioLangs?.fonts ?? []).reduce((n, f) => n + LG.pad(new Uint8Array(f.length)).length, 0);
+    const inRadio = radioLangs?.old ? el('p', {class: 'id-warn'}, t('langOldFirmware')) : radioLangs ? el('div', {},
+        el('div', {class: 'lang-row'}, el('div', {}, 'English'), el('div', {class: 'muted'}, t('langBuiltIn'))),
+        ...radioLangs.slots.filter((s) => s).map((s) => el('div', {class: 'lang-row'},
+            el('div', {}, `${s.name} · ${s.englishName} (${s.code})`,
+                iconButton('trash', t('delete'), () => deleteFromRadio('language', s.code), 'ghost')),
+            el('div', {class: 'muted'}, `${s.count} ${t('langStrings')}` + (s.font ? ` · ${fontState(s.font)}` : '')),
+            (s.font && !radioLangs.fonts.some((f) => f.name === s.font)) ?
+                el('p', {class: 'id-warn'}, t('langFontAsk').replace('{lang}', s.name).replaceAll('{font}', `${s.font}.bin`)) : null)),
+        ...radioLangs.fonts.map((f) => el('div', {class: 'lang-row'},
+            el('div', {}, `${t('langFont')} ${f.name}`, iconButton('trash', t('delete'), () => deleteFromRadio('font', f.name), 'ghost')),
+            el('div', {class: 'muted'}, kb(f.length)))),
+        el('p', {class: 'muted'}, `${t('langSpace')}: ${kb(used)} / ${kb(LG.FONT_END - LG.FONT_ADDRESS)}`))
+        : el('p', {class: 'muted'}, link?.connected ? t('langReading') : t('idConnectFirst'));
+    main.append(pageHead(t('languages')),
+        el('div', {class: 'general-cards'},
+            el('div', {class: 'card form-card'},
+                el('h3', {class: 'card-title'}, t('langFiles')),
+                el('p', {class: 'muted'}, langSet.languages.length ? t('langIntro') : t('langNoFiles')),
+                rows.length ? el('div', {class: 'lang-list'}, rows) : null,
+                el('div', {class: 'id-sources'},
+                    button(t('langPickFolder'), 'open', () => folderInput.click()),
+                    button(t('langPickFiles'), 'open', () => filesInput.click(), 'ghost'),
+                    folderInput, filesInput),
+                el('div', {class: 'id-write'},
+                    el('button', {class: 'primary', disabled: !link?.connected || langBusy ||
+                        !langSet.languages.some((l) => l.ticked && !l.errors.length) || radioLangs?.old,
+                    onclick: writeLanguages}, icon('upload'), t('langWrite')),
+                    link?.connected ? null : el('span', {class: 'muted'}, t('idConnectFirst'))),
+                el('p', {class: 'muted id-hint'}, t('langHint'))),
+            el('div', {class: 'card form-card'},
+                el('h3', {class: 'card-title'}, t('langInRadio')),
+                inRadio,
+                link?.connected ? button(t('langReadRadio'), 'download', () => {
+                    radioLangs = null;
+                    refreshRadioLangs();
+                }, 'ghost') : null)));
 }
 
 /* ---- scan lockouts (OpenDMR: * held on a scan, the quick menu's Scan lockout, the main menu's list) ---- */
@@ -2605,10 +2922,11 @@ function setConnected(on) {
     if (!on) {
         radio = null;
         rxLog = null;
+        radioLangs = null;
         showRadio();
         status(t('notConnected'));
     }
-    if (tab === 'dmrIds' || tab === 'debug') { // their buttons and "not connected" follow the link (debug: its status)
+    if (tab === 'dmrIds' || tab === 'debug' || tab === 'languages') { // their buttons and "not connected" follow the link (debug: its status)
         render();
     }
 }

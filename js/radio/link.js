@@ -1,12 +1,16 @@
 // The programming cable link to an OpenDMR radio (OpenDMR src/services/cable_link.c), over Web Serial (Chrome, Edge).
 //   'R' area(1) address(4 BE) length(2 BE)   -> 'R' length(2 BE) data, or '-'. Area 1: the data flash window,
-//                                               9: the radio info
-//   'X' 1 sector(3 BE)                       -> 'X' 1: the sector into the radio's buffer
+//                                               9: the radio info, 10: raw addresses of the language slots and font
+//                                               files (OpenDMR 0.8.0, docs/i18n.en.md)
+//   'X' 1 sector(3 BE)                       -> 'X' 1: the sector into the radio's buffer; with 0x800000 a raw
+//                                               sector of the language area (its 'X' 2 addresses raw too)
 //   'X' 2 address(4 BE) length(2 BE) data    -> 'X' 2: bytes into it
 //   'X' 3                                    -> 'X' 3: the buffer to the flash
 //   'C' 5 / 'C' 6 n                          -> '-': close the radio's CPS screen / 6 2: save the settings,
-//                                               6 1: save them (if changed) and restart
-//   'D' 'K' address(4 BE)                    -> 'D' 'K' CRC-32(4 BE) of the window's sector there (firmware 0.4.0)
+//                                               6 1: save them (if changed) and restart / 8: languages and fonts
+//                                               written, the radio reads them again
+//   'D' 'K' address(4 BE)                    -> 'D' 'K' CRC-32(4 BE) of the window's sector there (firmware 0.4.0);
+//                                               with 0x80000000, of a raw sector of the language area
 //   'D' 'S' divisor(2 BE)                    -> 'D' 'S' 1: the radio's UART at 84 MHz / 16 / divisor; 'D' 'Y' at
 //                                               it confirms, or it goes back to 115200 after 2 s, and after 5 s
 //                                               without a request
@@ -25,6 +29,9 @@ const QUIET_BACK_MS = 5500;            // and after 5 s without a request
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const AREA_FLASH = 1;
 const AREA_RADIO_INFO = 9;
+const AREA_LANGUAGES = 10;
+const RAW_SECTOR = 0x800000;
+const RAW_CRC = 0x80000000;
 
 export class RadioLink {
     constructor() {
@@ -268,12 +275,13 @@ export class RadioLink {
         }
     }
 
-    // One 4 KB sector of the window
-    async writeSector(sector, data) {
-        if (IGNORED_SECTORS.includes(sector)) {
+    // One 4 KB sector of the window; raw: a raw sector of the language area (sector = raw address / 4096)
+    async writeSector(sector, data, raw = false) {
+        if (!raw && IGNORED_SECTORS.includes(sector)) {
             return;
         }
-        await this.expect([0x58, 1, (sector >> 16) & 0xFF, (sector >> 8) & 0xFF, sector & 0xFF], [0x58, 1]);
+        const s = raw ? (sector | RAW_SECTOR) : sector;
+        await this.expect([0x58, 1, (s >> 16) & 0xFF, (s >> 8) & 0xFF, s & 0xFF], [0x58, 1]);
         for (let off = 0; off < SECTOR; off += WRITE_CHUNK) {
             const address = (sector * SECTOR) + off;
             const n = Math.min(WRITE_CHUNK, SECTOR - off);
@@ -285,14 +293,14 @@ export class RadioLink {
 
     // A failed write or CRC mismatch invalidates the whole sector transaction.
     // Start it again at a lower speed, including a fresh prepare and read-back CRC.
-    async writeVerifiedSector(sector, data, onSpeedChange) {
+    async writeVerifiedSector(sector, data, onSpeedChange, raw = false) {
         const address = sector * SECTOR;
         const expected = crc32(data);
         for (;;) {
             const previous = this.baud;
             try {
-                await this.writeSector(sector, data);
-                const actual = await this.sectorCrc(address);
+                await this.writeSector(sector, data, raw);
+                const actual = await this.sectorCrc(address, 3, raw);
                 if (actual !== expected) {
                     throw new Error(actual === null ? 'no CRC reply' : 'read back different');
                 }
@@ -302,7 +310,7 @@ export class RadioLink {
                     throw new Error(`sector 0x${address.toString(16)}: ${e.message}`, {cause: e});
                 }
                 await this.speedDown();
-                const baud = await this.speedUp(address, false, previous);
+                const baud = await this.speedUp(raw ? 0 : address, false, previous);
                 if (baud === BAUD) {
                     try {
                         localStorage.setItem(this.cableKey(false), String(Math.round(UART_CLOCK / BAUD)));
@@ -316,11 +324,11 @@ export class RadioLink {
     }
 
     // The radio's CRC-32 of the window's sector at address ('D' 'K'); null: no answer (a firmware before 0.4.0)
-    async sectorCrc(address, attempts = 3) {
+    async sectorCrc(address, attempts = 3, raw = false) {
+        const a = raw ? ((address | RAW_CRC) >>> 0) : address;
         for (let i = 0; i < attempts; i++) {
             try {
-                await this.send([0x44, 0x4B, (address >>> 24) & 0xFF, (address >>> 16) & 0xFF, (address >>> 8) & 0xFF,
-                    address & 0xFF]);
+                await this.send([0x44, 0x4B, (a >>> 24) & 0xFF, (a >>> 16) & 0xFF, (a >>> 8) & 0xFF, a & 0xFF]);
                 const r = await this.receive(6, true, 500);
                 if (r[0] === 0x44 && r[1] === 0x4B) {
                     return ((r[2] << 24) | (r[3] << 16) | (r[4] << 8) | r[5]) >>> 0;
@@ -491,6 +499,33 @@ export class RadioLink {
 
     closeScreen() {
         return this.command(5);
+    }
+
+    // Bytes of the language slots and font files (raw addresses); null: a firmware without them (before 0.8.0)
+    async readLanguageArea(address, length) {
+        const out = new Uint8Array(length);
+        for (let at = 0; at < length; at += READ_CHUNK) {
+            const n = Math.min(READ_CHUNK, length - at);
+            for (let attempt = 0; ; attempt++) {
+                try {
+                    out.set(await this.read(AREA_LANGUAGES, address + at, n), at);
+                    break;
+                } catch (e) {
+                    if (e.message === 'refused') {
+                        return null;
+                    }
+                    if (attempt >= 2) {
+                        throw e;
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    // The languages and fonts written: the radio reads them again, without a restart
+    reloadLanguages() {
+        return this.command(8);
     }
 
     // The radio's settings from its RAM to the flash (they are saved there only when changed in the menus, at power
