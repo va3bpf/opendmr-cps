@@ -1014,8 +1014,8 @@ function viewAprs(main) {
             el('summary', {}, t('aprsSymbolChart')),
             el('div', {class: 'aprs-symbol-grid'}, symbols.map((symbol) =>
                 el('button', {type: 'button', class: 'aprs-symbol-cell', 'data-value': symbol.value,
-                    'aria-label': `${symbol.code}: ${symbol.description}`, 'aria-pressed': String(c.icon === symbol.value),
-                    title: `${symbol.code}: ${symbol.description}`, onclick: () => changeIcon(symbol.value)},
+                    'aria-label': symbol.code, 'aria-pressed': String(c.icon === symbol.value),
+                    title: symbol.code, onclick: () => changeIcon(symbol.value)},
                 el('span', {class: 'aprs-symbol-character'}, symbol.character),
                 el('span', {class: 'aprs-symbol-code'}, symbol.code)))));
         const iconPicker = el('div', {class: 'aprs-icon-picker'}, symbolChart);
