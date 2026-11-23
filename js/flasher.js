@@ -12,7 +12,6 @@ import {Updater, prepareImage} from './radio/updater.js';
 import {Bootloader, CHIP_DATA, CHIP_PROGRAM} from './radio/bootloader.js';
 import {setRelease, currentRelease, ReleaseMissing} from './radio/assets.js';
 import {crc32} from './codeplug/oddb.js';
-import * as L from './codeplug/layout.js';
 
 const PROGRAM_SIZE = 1 << 20;          // the GD25Q80
 const DATA_SIZE = 16 << 20;            // the 25Q128
@@ -43,7 +42,7 @@ export function createFlasher(deps) {
         task: null,          // the task chosen; null: from the radio (OpenDMR answering: update, else install)
         firmware: null,      // {name, size, image}: the release's opendmr.bin, or another file chosen
         fromRelease: false,
-        saved: {codeplug: null, [CHIP_PROGRAM]: null, [CHIP_DATA]: null}, // backup file names made this session
+        saved: {[CHIP_PROGRAM]: null, [CHIP_DATA]: null}, // backup file names made this session
         stock: {[CHIP_PROGRAM]: null, [CHIP_DATA]: null},                 // back to stock: {name, data}
         finished: {update: false, install: false, stock: false}, // the task's last step went through (green, and
                                                                  // still there to do again)
@@ -142,11 +141,6 @@ export function createFlasher(deps) {
         } else {
             logLine(`${t('flScreenOk')}: ${screen.sent}`);
         }
-    }
-
-    // OpenDMR answering on the page's port
-    function online() {
-        return !!(getLink()?.connected && getRadio());
     }
 
     // What the page is doing, in the panel at the top (and the status bar below)
@@ -249,26 +243,6 @@ export function createFlasher(deps) {
     });
 
     /* ---- backups ---- */
-
-    const doCodeplug = busyGuard(async () => {
-        const link = getLink();
-        logLine(`—— ${t('flBackupCodeplug')}`);
-        const img = new Uint8Array(L.IMAGE_SIZE).fill(0xFF);
-        const total = L.REGIONS.reduce((n, r) => n + (r.end - r.start), 0);
-        let done = 0;
-        say(t('reading'));
-        for (const r of L.REGIONS) {
-            await link.readRegion(img, r.start, r.end, progress, done, total);
-            done += r.end - r.start;
-            say(`${t('reading')} ${Math.round((100 * done) / total)} % · ${link.baud} baud`, done, total);
-        }
-        const name = `dm32-codeplug-${stamp()}.bin`;
-        download(name, img);
-        state.saved.codeplug = name;
-        say(t('flBackupDone'), 1, 1);
-        logLine(`${t('flBackupDone')}: ${name} · ${kb(img.length)}`, 'ok');
-        toast(t('flBackupDone'), 5000);
-    });
 
     const doBackup = busyGuard(async (portPromise, chip) => {
         const name = `dm32-${chip === CHIP_DATA ? 'data' : 'program'}-${stamp()}.bin`;
@@ -486,13 +460,7 @@ export function createFlasher(deps) {
                 {primary: true, disabled: !release || !state.firmware}),
             }])];
         } else if (task === 'backup') {
-            panel = [stepList([{
-                title: t('flBackupCodeplug'),
-                sub: state.saved.codeplug ? `${t('flSaved')}: ${state.saved.codeplug}`
-                    : (radio ? t('flBackupCodeplugSub') : t('flNeedsOpenDmr')),
-                done: !!state.saved.codeplug, optional: true,
-                action: button(t('flBackUp'), 'download', doCodeplug, {disabled: !online()}),
-            }, backupStep(CHIP_PROGRAM, true), backupStep(CHIP_DATA, true)])];
+            panel = [stepList([backupStep(CHIP_PROGRAM, true), backupStep(CHIP_DATA, true)])];
         } else {
             const prog = state.stock[CHIP_PROGRAM];
             const data = state.stock[CHIP_DATA];

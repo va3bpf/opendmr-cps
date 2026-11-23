@@ -76,11 +76,13 @@ export class RadioLink {
     async reopen(baud) {
         const port = this.port;
         try {
+            this.stopping = true;
             await this.reader?.cancel();
             await this.reading;
         } catch (e) {
             // the reader was done
         }
+        this.stopping = false;
         await port.close().catch(() => {});
         await port.open({baudRate: baud, bufferSize: 8192});
         this.port = port;
@@ -94,11 +96,13 @@ export class RadioLink {
             return;
         }
         try {
+            this.stopping = true;
             await this.reader?.cancel();
             await this.reading;
         } catch (e) {
             // the port went away
         }
+        this.stopping = false;
         await this.port.close().catch(() => {});
         this.port = null;
     }
@@ -111,11 +115,13 @@ export class RadioLink {
     // link's reader stopped and the port closed, the port kept, so the page stays connected to it
     async suspend() {
         try {
+            this.stopping = true;
             await this.reader?.cancel();
             await this.reading;
         } catch (e) {
             // the reader was done
         }
+        this.stopping = false;
         await this.port.close().catch(() => {});
         this.suspended = true;
     }
@@ -132,14 +138,17 @@ export class RadioLink {
         this.reading = this.readLoop();
     }
 
+    // Reads until the link stops it (close, reopen, suspend). A break or framing error (the radio switched off: its
+    // line goes low) ends a reader with an error and Web Serial gives the port a new readable: read on with it, or a
+    // radio switched on again is never heard
     async readLoop() {
-        while (this.port?.readable) {
+        while (!this.stopping && this.port?.readable) {
             this.reader = this.port.readable.getReader();
             try {
                 for (;;) {
                     const {value, done} = await this.reader.read();
                     if (done) {
-                        return;
+                        break;
                     }
                     for (const b of value) {
                         this.buffer.push(b);
@@ -147,9 +156,12 @@ export class RadioLink {
                     this.waiter?.();
                 }
             } catch (e) {
-                return;
+                // a line error (read on with a new reader), or the port closing
             } finally {
                 this.reader.releaseLock();
+            }
+            if (!this.stopping) {
+                await new Promise((resolve) => setTimeout(resolve, 10)); // a fatal error leaves readable null
             }
         }
     }

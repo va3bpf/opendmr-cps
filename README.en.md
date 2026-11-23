@@ -27,21 +27,22 @@ Current version **0.12.0** ([changelog](CHANGELOG.md)).
 
 ## Flasher and backups
 
-The **Flasher** page (last in the sidebar) works from the unzipped OpenDMR release folder you choose: the firmware
-(`opendmr.bin`) and the two programs it loads into the radio's RAM (`tools/debug/updater/updater.bin`,
-`tools/backup/dumper/dumper.bin`) all come from that folder, so they always belong to the same release.
+The **Flasher** page (last in the sidebar) uses the page's connected port and cable speed (the toolbar) and the
+unzipped OpenDMR release folder you choose: the firmware (`opendmr.bin`) and the two programs it loads into the radio's
+RAM (`tools/debug/updater/updater.bin`, `tools/backup/dumper/dumper.bin`) all come from that folder, so they always
+belong to the same release. One task at a time, each with its steps:
 
-1. **Backups**: the codeplug and settings (radio on, seconds), the program flash (1 MB) and the data flash (16 MB, with
-   the radio's factory calibration). The last two go through the chip bootloader (radio off, then on) and are checked
-   against the radio sector by sector once read.
-2. **Install or update**: **Update** writes the sectors that differ over the programming cable, without the PTT + SK1
-   upgrade mode, as OpenDMR's `tools/debug/fw_update.py`; **Install / rewrite all** writes the whole firmware area;
-   **Install on a stock radio** goes through the chip bootloader.
-3. **Back to the stock firmware**: writes the radio's own backups back. A data flash backup is only written when its
-   factory calibration sector matches the radio's.
+- **Update OpenDMR**: writes the sectors that differ over the cable, without the PTT + SK1 upgrade mode, as OpenDMR's
+  `tools/debug/fw_update.py`.
+- **Install on a stock radio**: through the chip bootloader (radio off, then on).
+- **Back up this radio**: the program flash (1 MB) and the data flash (16 MB, with the radio's factory calibration),
+  through the chip bootloader, each checked against the radio sector by sector once read. The codeplug itself is
+  backed up with "Read radio" and "Save file".
+- **Back to stock**: writes the radio's own backups back in one power cycle; a data flash backup only when its
+  factory calibration sector matches the radio's.
 
 Only the firmware area (0xC000 and up) of the program flash is ever written; the bootloader below it stays. The radio's
-screen and a log on the page show each step; the log can be saved to a file.
+screen and the page's log show each step; the log can be saved to a file.
 
 ## Use
 
