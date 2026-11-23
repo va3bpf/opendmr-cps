@@ -526,7 +526,12 @@ button.more { margin: 6px 4px; width: calc(100% - 8px); justify-content: center;
 .fl-fold .id-sources { margin: 6px 0; }
 
 /* the flasher's log: the time in its column, the lines wrapping, its own scroll */
-.fl-log { max-height: 260px; overflow: auto; border: 1px solid var(--line); border-radius: 8px;
+.fl-log-panel { margin-top: 14px; padding: 14px 18px; }
+.fl-log-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    margin-bottom: 8px; }
+.fl-log-head .card-title { margin: 0; }
+.fl-log-head .id-sources { margin: 0; }
+.fl-log { min-height: 120px; max-height: 360px; overflow: auto; border: 1px solid var(--line); border-radius: 8px;
   padding: 8px 10px; background: var(--bg); font: 12.5px/1.5 ui-monospace, Consolas, monospace; }
 .fl-log-line { white-space: pre-wrap; word-break: break-word; }
 .fl-log-time { opacity: .55; }
