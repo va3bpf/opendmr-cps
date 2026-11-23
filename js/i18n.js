@@ -72,6 +72,8 @@ const TEXTS = {
     available: ['可选', 'Available', 'Disponibles'],
     contactsInList: ['列表中的联系人', 'Contacts in the list', 'Contactos en la lista'],
     notConnected: ['未连接', 'Not connected', 'No conectado'],
+    portNoRadio: ['已连接串口，电台没有应答（原厂固件或关机）', 'Port connected; the radio does not answer (stock firmware, or off)',
+        'Puerto conectado; la radio no responde (firmware original, o apagada)'],
     connected: ['已连接', 'Connected', 'Conectado'],
     reading: ['正在读取', 'Reading', 'Leyendo'],
     writing: ['正在写入', 'Writing', 'Escribiendo'],

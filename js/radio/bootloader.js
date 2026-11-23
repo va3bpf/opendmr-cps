@@ -12,6 +12,7 @@ import {RawPort} from './serial.js';
 import {dumperImage} from './assets.js';
 import {Screen, GREY, GREEN, RED} from './screen.js';
 import {crc32} from '../codeplug/oddb.js';
+import {RadioLink, radioBaud} from './link.js';
 
 const BLOCK = 4096;
 const LOAD_ADDRESS = 0x10000;
@@ -95,11 +96,17 @@ export class Bootloader {
         return new DataView(reply.buffer, reply.byteOffset + 4, 2).getUint16(0);
     }
 
-    // The reader's UART to 250000: its divisor scaled from the one of 115200, checked both ways, else the slow one
+    // The reader's UART to the page's cable speed (the toolbar: a rate typed in, or auto: 250000, which both cables
+    // keep, as dm32_dump.py): its divisor scaled from the one of 115200, checked both ways, else the slow one
     async speedUp(divisor) {
-        const newDivisor = Math.round((divisor * SLOW) / FAST);
+        const chosen = (RadioLink.speed === 'auto') ? null : radioBaud(RadioLink.speed);
+        const target = chosen ?? FAST;
+        if (target <= SLOW) {
+            return false;
+        }
+        const newDivisor = Math.round((divisor * SLOW) / target);
         const actual = (divisor * SLOW) / newDivisor;
-        if (newDivisor < 1 || Math.abs(actual - FAST) / FAST > 0.03) {
+        if (newDivisor < 1 || Math.abs(actual - target) / target > 0.03) {
             return false;
         }
         const ask = new Uint8Array(3);
@@ -109,12 +116,13 @@ export class Bootloader {
         if ((await this.s.read(1, 3000))[0] !== 0x53) {
             throw new Error('no answer to the speed change');
         }
-        await this.s.setBaud(FAST);
+        await this.s.setBaud(target);
         await sleep(50);
         this.s.clear();
         await this.s.write(new Uint8Array([0x48])); // 'H'
         try {
-            if (await this.hello(1000)) {                await this.s.write(new Uint8Array([0x59])); // 'Y'
+            if (await this.hello(1000)) {
+                await this.s.write(new Uint8Array([0x59])); // 'Y'
                 if ((await this.s.read(1, 1000))[0] === 0x59) {
                     this.slow = false;
                     return true;

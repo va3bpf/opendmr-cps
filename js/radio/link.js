@@ -107,6 +107,31 @@ export class RadioLink {
         return this.port !== null;
     }
 
+    // The port lent to the flasher (it speaks to the update program and the chip bootloader at the byte level): this
+    // link's reader stopped and the port closed, the port kept, so the page stays connected to it
+    async suspend() {
+        try {
+            await this.reader?.cancel();
+            await this.reading;
+        } catch (e) {
+            // the reader was done
+        }
+        await this.port.close().catch(() => {});
+        this.suspended = true;
+    }
+
+    // ... and back: the port open again at 115200 (the radio may have restarted meanwhile)
+    async resume() {
+        if (!this.suspended) {
+            return;
+        }
+        await this.port.open({baudRate: BAUD, bufferSize: 8192});
+        this.baud = BAUD;
+        this.buffer = [];
+        this.suspended = false;
+        this.reading = this.readLoop();
+    }
+
     async readLoop() {
         while (this.port?.readable) {
             this.reader = this.port.readable.getReader();

@@ -1322,7 +1322,7 @@ async function writeOldFormat(plan) {
 }
 
 async function writeDmrIds() {
-    if (!link?.connected || !dmrDb || dmrIdBusy) {
+    if (!online() || !dmrDb || dmrIdBusy) {
         return;
     }
     dmrIdBusy = true;
@@ -1363,7 +1363,7 @@ async function writeDmrIds() {
     } finally {
         progress(0, 0);
         try {
-            if (transferStarted && link?.connected) {
+            if (transferStarted && online()) {
                 await link.speedDown(); // the radio is back at 115200 by itself after 5 s of quiet
                 await link.closeScreen();
             }
@@ -1426,9 +1426,9 @@ function viewDmrIds(main) {
                     samples.map((r) => el('div', {class: 'id-sample'}, el('span', {class: 'dim'}, r[0]), ' ', shown(r))))
                     : null,
                 el('div', {class: 'id-write'},
-                    el('button', {class: 'primary', disabled: !link?.connected || dmrIdBusy || !dmrDb || (!db && !old.count),
+                    el('button', {class: 'primary', disabled: !online() || dmrIdBusy || !dmrDb || (!db && !old.count),
                         onclick: writeDmrIds}, icon('upload'), t('idWrite')),
-                    link?.connected ? null : el('span', {class: 'muted'}, t('idConnectFirst'))),
+                    online() ? null : el('span', {class: 'muted'}, t('idConnectFirst'))),
                 el('p', {class: 'muted id-hint'}, t('idFirmwareNote')))));
 }
 
@@ -1565,7 +1565,7 @@ async function readRadioLangs() {
 }
 
 async function refreshRadioLangs() {
-    if (!link?.connected || langBusy) {
+    if (!online() || langBusy) {
         return;
     }
     langBusy = true;
@@ -1613,7 +1613,7 @@ async function writeSectors(address, data, done, total) {
 }
 
 async function writeLanguages() {
-    if (!link?.connected || langBusy || !langSet) {
+    if (!online() || langBusy || !langSet) {
         return;
     }
     const chosen = langSet.languages.filter((l) => l.ticked && !l.errors.length);
@@ -1704,11 +1704,11 @@ async function writeLanguages() {
     } finally {
         progress(0, 0);
         try {
-            if (started && link?.connected) {
+            if (started && online()) {
                 await link.speedDown();
                 await link.closeScreen();
             }
-            if (link?.connected) {
+            if (online()) {
                 radioLangs = await readRadioLangs() ?? {old: true, slots: [], fonts: []};
             }
         } catch (e) {
@@ -1720,7 +1720,7 @@ async function writeLanguages() {
 }
 
 async function deleteFromRadio(kind, what) {
-    if (!link?.connected || langBusy || !window.confirm(t('langDeleteAsk').replace('{name}', what))) {
+    if (!online() || langBusy || !window.confirm(t('langDeleteAsk').replace('{name}', what))) {
         return;
     }
     langBusy = true;
@@ -1749,7 +1749,7 @@ function viewLanguages(main) {
     if (!langSet) {
         langSet = loadLangFiles({}); // the user chooses the languages folder of opendmr-languages
     }
-    if (link?.connected && !radioLangs && !langBusy) {
+    if (online() && !radioLangs && !langBusy) {
         refreshRadioLangs();
     }
     const folderInput = el('input', {type: 'file', webkitdirectory: true, hidden: true});
@@ -1797,7 +1797,7 @@ function viewLanguages(main) {
             el('div', {}, `${t('langFont')} ${f.name}`, iconButton('trash', t('delete'), () => deleteFromRadio('font', f.name), 'ghost')),
             el('div', {class: 'muted'}, kb(f.length)))),
         el('p', {class: 'muted'}, `${t('langSpace')}: ${kb(used)} / ${kb(LG.FONT_END - LG.FONT_ADDRESS)}`))
-        : el('p', {class: 'muted'}, link?.connected ? t('langReading') : t('idConnectFirst'));
+        : el('p', {class: 'muted'}, online() ? t('langReading') : t('idConnectFirst'));
     main.append(pageHead(t('languages')),
         el('div', {class: 'general-cards'},
             el('div', {class: 'card form-card'},
@@ -1809,15 +1809,15 @@ function viewLanguages(main) {
                     button(t('langPickFiles'), 'open', () => filesInput.click(), 'ghost'),
                     folderInput, filesInput),
                 el('div', {class: 'id-write'},
-                    el('button', {class: 'primary', disabled: !link?.connected || langBusy ||
+                    el('button', {class: 'primary', disabled: !online() || langBusy ||
                         !langSet.languages.some((l) => l.ticked && !l.errors.length) || radioLangs?.old,
                     onclick: writeLanguages}, icon('upload'), t('langWrite')),
-                    link?.connected ? null : el('span', {class: 'muted'}, t('idConnectFirst'))),
+                    online() ? null : el('span', {class: 'muted'}, t('idConnectFirst'))),
                 el('p', {class: 'muted id-hint'}, t('langHint'))),
             el('div', {class: 'card form-card'},
                 el('h3', {class: 'card-title'}, t('langInRadio')),
                 inRadio,
-                link?.connected ? button(t('langReadRadio'), 'download', () => {
+                online() ? button(t('langReadRadio'), 'download', () => {
                     radioLangs = null;
                     refreshRadioLangs();
                 }, 'ghost') : null)));
@@ -1979,7 +1979,7 @@ function rxLogError(e) {
 }
 
 async function rxLogDo(op, arg = null) {
-    if (!link?.connected || rxLogBusy) {
+    if (!online() || rxLogBusy) {
         return;
     }
     rxLogBusy = true;
@@ -2012,7 +2012,7 @@ async function rxLogClear() {
 // The file: RX_LOG_FILE, the JSON length (u32 LE), JSON, then each sector oldest first: its length (u16 LE) and its
 // bytes up to its last record (no 0xFF)
 async function rxLogExport() {
-    if (!link?.connected || rxLogBusy) {
+    if (!online() || rxLogBusy) {
         return;
     }
     rxLogBusy = true;
@@ -2079,7 +2079,7 @@ async function rxLogExport() {
 }
 
 function viewDebug(main) {
-    const connected = !!link?.connected;
+    const connected = !!online();
     const st = rxLog;
     const off = !connected || rxLogBusy;
     main.append(pageHead(t('debug')),
@@ -2961,12 +2961,18 @@ function showRadio() {
         el('span', {class: 'dim'}, buildTime(radio.build))));
 }
 
+// The radio answering over the connected port (OpenDMR running): what the codeplug, DMR ID, language and debug
+// transfers need. The port can be connected without it (a stock radio, a radio off for the flasher's bootloader).
+function online() {
+    return !!(link?.connected && !link.suspended && radio);
+}
+
 function setConnected(on) {
     const b = $('btnConnect');
     b.querySelector('span').dataset.i18n = on ? 'disconnect' : 'connect';
     b.querySelector('span').textContent = t(on ? 'disconnect' : 'connect');
-    $('btnRead').disabled = !on;
-    $('btnWrite').disabled = !on;
+    $('btnRead').disabled = !online();
+    $('btnWrite').disabled = !online();
     $('linkDot').classList.toggle('on', on);
     if (!on) {
         radio = null;
@@ -2994,6 +3000,19 @@ async function connect() {
     link = new RadioLink();
     try {
         await link.open();
+    } catch (e) {
+        toast(t('error') + ': ' + e.message, 6000);
+        link = null;
+        setConnected(false);
+        return;
+    }
+    await refreshRadio();
+}
+
+// What answers on the connected port: OpenDMR (its info shown), or nothing (the port stays connected: a stock radio,
+// one switched off, the flasher's bootloader steps)
+async function refreshRadio() {
+    try {
         const info = await link.radioInfo();
         if (info.radioType !== 11) {
             toast(t('notOpenDmr'), 6000);
@@ -3003,10 +3022,10 @@ async function connect() {
         setConnected(true);
         status(t('connected'));
     } catch (e) {
-        toast(t('error') + ': ' + e.message, 6000);
-        await link?.close();
-        link = null;
-        setConnected(false);
+        radio = null;
+        showRadio();
+        setConnected(true);
+        status(t('portNoRadio'));
     }
 }
 
@@ -3130,7 +3149,7 @@ async function readRadio() {
 // The radio back at 115200 after a transfer (it would keep a confirmed speed until 5 s without a request)
 async function speedBack() {
     try {
-        if (link?.connected) {
+        if (online()) {
             await link.speedDown();
         }
     } catch (e) {
@@ -3334,19 +3353,26 @@ async function importCsv(fileList) {
 
 /* ---- the flasher ---- */
 
-// The cable link closed from the flasher (the update and the bootloader take the port at the byte level)
-async function disconnectLink() {
-    if (link) {
-        await link.close().catch(() => {});
+// The port back from a flasher step: the link reopened, then what answers read again (the radio may be on OpenDMR
+// now, or on the stock firmware, or still in the bootloader)
+async function flasherGiveBack() {
+    if (!link?.connected) {
+        return;
     }
-    link = null;
-    radio = null;
-    setConnected(false);
-    status(t('notConnected'));
+    try {
+        await link.resume();
+    } catch (e) {
+        toast(t('error') + ': ' + e.message, 6000);
+        link = null;
+        setConnected(false);
+        return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1500)); // a radio restarting after an update answers in ~1 s
+    await refreshRadio();
 }
 
 const flasherView = createFlasher({
-    el, pageHead, toast, status, progress, getLink: () => link, getRadio: () => radio, disconnect: disconnectLink,
+    el, pageHead, toast, status, progress, getLink: () => link, getRadio: () => radio, giveBack: flasherGiveBack,
     rerender: () => render(),
 });
 

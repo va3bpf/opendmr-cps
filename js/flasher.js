@@ -8,7 +8,6 @@
 
 import {t} from './i18n.js';
 import {icon} from './icons.js';
-import {RawPort} from './radio/serial.js';
 import {Updater, prepareImage} from './radio/updater.js';
 import {Bootloader, CHIP_DATA, CHIP_PROGRAM} from './radio/bootloader.js';
 import {setRelease, currentRelease, ReleaseMissing} from './radio/assets.js';
@@ -25,9 +24,10 @@ function clock() {
     return `${two(now.getHours())}:${two(now.getMinutes())}:${two(now.getSeconds())}`;
 }
 
-// deps: {el, pageHead, toast, status, progress, getLink, getRadio, disconnect, rerender}
+// deps: {el, pageHead, toast, status, progress, getLink, getRadio, giveBack, rerender}; giveBack(): the port back to
+// the page's link after a step (and what answers on it read again)
 export function createFlasher(deps) {
-    const {el, pageHead, toast, status, progress, getLink, getRadio, disconnect, rerender} = deps;
+    const {el, pageHead, toast, status, progress, getLink, getRadio, giveBack, rerender} = deps;
     const state = {
         busy: false,
         firmware: null,      // {name, size, image}: the release's opendmr.bin, or another file chosen
@@ -177,38 +177,24 @@ export function createFlasher(deps) {
         };
     }
 
-    // The cable port for an update or a bootloader read, without a prompt when the CPS already has it. Called in the
-    // click itself: the port chooser needs the user's gesture, which waiting first may have used up
-    function portForAction() {
-        if (!RawPort.supported()) {
-            throw new Error(t(window.isSecureContext ? 'noSerial' : 'serialNeedsLocal'));
-        }
-        const link = getLink();
-        if (link?.connected) {
-            const port = link.port;
-            return (async () => {
-                await link.close().catch(() => {});
-                disconnect?.();
-                return port;
-            })();
-        }
-        return navigator.serial.requestPort();
-    }
-
+    // The page's connected port (the toolbar's "Connect": one port for the whole page), lent to a step: the link's
+    // reader stopped, the port given back when the step ends
     function withPort(action) {
         if (state.busy) {
             toast(t('flBusy'));
             return;
         }
-        let port;
-        try {
-            port = portForAction();
-        } catch (e) {
-            logLine(t('error') + ': ' + e.message, 'bad');
-            toast(t('error') + ': ' + e.message, 8000);
+        const link = getLink();
+        if (!link?.connected) {
+            logLine(t('flConnectFirst'), 'bad');
+            toast(t('flConnectFirst'), 6000);
             return;
         }
-        action(port);
+        const port = (async () => {
+            await link.suspend();
+            return link.port;
+        })();
+        Promise.resolve(action(port)).finally(() => giveBack());
     }
 
     /* ---- firmware update ---- */
@@ -250,7 +236,6 @@ export function createFlasher(deps) {
                 }
             }, force);
             logLine(`cable: ${updater.s.baud} baud`);
-            disconnect?.();
             const seconds = Math.round((Date.now() - started) / 1000);
             say(`${t('flUpdateDone')} (${written} × 4 KB)`, 1, 1);
             logLine(`${t('flUpdateDone')}: ${written} × 4 KB · ${seconds} s`, 'ok');
@@ -323,7 +308,7 @@ export function createFlasher(deps) {
             const seconds = Math.round((Date.now() - started) / 1000);
             say(t('flBackupDone'), 1, 1);
             logLine(`${t('flBackupDone')}: ${name} · ${(result.size / 1024).toFixed(0)} KB · ` +
-                `JEDEC ${Array.from(result.id).map((b) => b.toString(16)).join(' ')} · ${seconds} s`, 'ok');
+                `JEDEC ${Array.from(result.id).map((b) => b.toString(16)).join(' ')} · ${boot.s.baud} baud · ${seconds} s`, 'ok');
             screenNote(boot.screen);
             toast(t('flBackupDone'), 5000);
         } catch (e) {
@@ -405,7 +390,7 @@ export function createFlasher(deps) {
             });
             const seconds = Math.round((Date.now() - started) / 1000);
             say(`${t('flRestoreDone')} (${written})`, 1, 1);
-            logLine(`${t('flRestoreDone')}: ${written} · ${seconds} s`, 'ok');
+            logLine(`${t('flRestoreDone')}: ${written} · ${boot.s.baud} baud · ${seconds} s`, 'ok');
             screenNote(boot.screen);
             toast(t('flRestoreDone'), 6000);
         } catch (e) {
