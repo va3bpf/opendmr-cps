@@ -61,6 +61,7 @@ export function createFlasher(deps) {
             state.log.splice(0, state.log.length - 2000);
         }
         if (state.logBox) {
+            state.logBox.querySelector('.fl-log-empty')?.remove();
             state.logBox.append(logRow(entry));
             while (state.logBox.childElementCount > state.log.length) {
                 state.logBox.firstElementChild.remove();
@@ -491,7 +492,8 @@ export function createFlasher(deps) {
         // the log: always there under the page, its whole width
         const logPanel = el('div', {class: 'card fl-log-panel'},
             el('div', {class: 'fl-log-head'},
-                el('h3', {class: 'card-title'}, t('flLogCard')),
+                el('h3', {class: 'card-title'}, t('flLogCard'),
+                    state.log.length ? el('span', {class: 'fl-log-count'}, String(state.log.length)) : null),
                 el('div', {class: 'id-sources'},
                     button(t('flLogCopy'), 'copy', logCopy, {ghost: true}),
                     button(t('flLogSave'), 'save', logSave, {ghost: true}),
@@ -499,7 +501,8 @@ export function createFlasher(deps) {
                         state.log = [];
                         rerender();
                     }, {ghost: true}))),
-            (state.logBox = el('div', {class: 'fl-log', role: 'log', 'aria-live': 'polite'}, state.log.map(logRow))));
+            (state.logBox = el('div', {class: 'fl-log', role: 'log', 'aria-live': 'polite'}, state.log.length
+                ? state.log.map(logRow) : el('div', {class: 'fl-log-empty'}, t('flLogEmpty')))));
 
         // what every task works with: the radio on the page's port, and the OpenDMR release folder
         const status = el('div', {class: 'fl-status'},
@@ -525,8 +528,9 @@ export function createFlasher(deps) {
                         }}, t(TASK_TEXT[k])))),
                 el('p', {class: 'muted fl-task-intro'}, t(TASK_TEXT[task] + 'Intro')),
                 ...panel,
-                live),
-            advanced), logPanel);
+                live,
+                advanced),
+            ), logPanel);
         state.logBox.scrollTop = state.logBox.scrollHeight;
     }
 

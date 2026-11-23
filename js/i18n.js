@@ -845,6 +845,7 @@ const TEXTS = {
         'the page cannot draw text (an old browser?): nothing sent to the radio screen',
         'la página no puede dibujar texto (¿navegador viejo?): no se envió nada a la pantalla de la radio'],
     idle: ['等待', 'Idle', 'En espera'],
+    flLogEmpty: ['还没有操作', 'Nothing done yet', 'Todavía no se hizo nada'],
     flLogCard: ['记录', 'Log', 'Registro'],
     flLogCopy: ['复制', 'Copy', 'Copiar'],
     flLogSave: ['保存为文件', 'Save to a file', 'Guardar en un archivo'],

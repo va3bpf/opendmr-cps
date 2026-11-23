@@ -495,7 +495,7 @@ button.more { margin: 6px 4px; width: calc(100% - 8px); justify-content: center;
 .lang-row .muted { font-size: 12px; padding-left: 24px; }
 
 /* the flasher: one card, the tasks as tabs, the task's steps as a numbered list */
-.fl-card { max-width: 760px; }
+.fl-card { max-width: none; }
 .fl-status { display: grid; gap: 8px; margin: 0 0 14px; }
 .fl-status-row { display: grid; grid-template-columns: 110px 1fr auto; gap: 12px; align-items: center; min-height: 32px; }
 .fl-status-label { color: var(--muted); font-size: 13px; }
@@ -521,19 +521,22 @@ button.more { margin: 6px 4px; width: calc(100% - 8px); justify-content: center;
 .fl-step-title { font-weight: 600; }
 .fl-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .fl-step-sub { font-size: 12.5px; margin-top: 2px; word-break: break-word; }
-.fl-fold { max-width: 760px; margin-top: 12px; }
-.fl-fold > summary { cursor: pointer; color: var(--muted); font-weight: 600; padding: 6px 0; }
+.fl-fold { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
+.fl-fold > summary { cursor: pointer; color: var(--muted); font-size: 13px; font-weight: 600; padding: 4px 0; }
 .fl-fold .id-sources { margin: 6px 0; }
 
 /* the flasher's log: the time in its column, the lines wrapping, its own scroll */
 .fl-scroll { flex: 1; min-height: 0; overflow: auto; }
-.fl-log-panel { flex: none; padding: 12px 18px; }
+.fl-log-panel { flex: none; padding: 14px 20px 16px; }
 .fl-log-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
     margin-bottom: 8px; }
-.fl-log-head .card-title { margin: 0; }
+.fl-log-head .card-title { margin: 0; display: flex; align-items: center; gap: 8px; }
+.fl-log-count { font-size: 11.5px; font-weight: 600; color: var(--muted); background: var(--bg); border: 1px solid var(--line);
+    border-radius: 10px; padding: 0 7px; }
 .fl-log-head .id-sources { margin: 0; }
-.fl-log { height: 190px; overflow: auto; border: 1px solid var(--line); border-radius: 8px;
-  padding: 8px 10px; background: var(--bg); font: 12.5px/1.5 ui-monospace, Consolas, monospace; }
+.fl-log { height: 170px; overflow: auto; border-top: 1px solid var(--line); padding-top: 8px;
+  font: 12.5px/1.6 ui-monospace, Consolas, monospace; }
+.fl-log-empty { color: var(--faint); font: 13px/1.6 system-ui, sans-serif; padding-top: 4px; }
 .fl-log-line { white-space: pre-wrap; word-break: break-word; }
 .fl-log-time { opacity: .55; }
 .fl-log-line.ok { color: var(--ok); }
