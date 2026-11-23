@@ -473,7 +473,8 @@ export function createFlasher(deps) {
             el('div', {class: 'fl-live-bar'}, el('i', {style: `width:${busy ? state.livePercent : 0}%`}))) : null;
         state.liveBox = live ? {text: live.querySelector('.fl-live-text'), bar: live.querySelector('i')} : null;
 
-        const advanced = el('details', {class: 'fl-fold'},
+        // the other things, apart from the tasks: their own panel, folded
+        const advanced = el('details', {class: 'card fl-adv'},
             el('summary', {}, t('flAdvanced')),
             el('div', {class: 'id-sources'},
                 button(t('flInstallAll'), 'upload', () => withPort((p) => doUpdate(p, true), 'update'),
@@ -522,8 +523,8 @@ export function createFlasher(deps) {
                         }}, t(TASK_TEXT[k])))),
                 el('p', {class: 'muted fl-task-intro'}, t(TASK_TEXT[task] + 'Intro')),
                 ...panel,
-                live,
-                advanced),
+                live),
+            advanced
             ), logPanel);
         state.logBox.scrollTop = state.logBox.scrollHeight;
     }

@@ -518,9 +518,11 @@ button.more { margin: 6px 4px; width: calc(100% - 8px); justify-content: center;
 .fl-step-title { font-weight: 600; }
 .fl-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .fl-step-sub { font-size: 12.5px; margin-top: 2px; word-break: break-word; }
-.fl-fold { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
-.fl-fold > summary { cursor: pointer; color: var(--muted); font-size: 13px; font-weight: 600; padding: 4px 0; }
-.fl-fold .id-sources { margin: 6px 0; }
+.fl-adv { margin-top: 14px; padding: 12px 20px; }
+.fl-adv > summary { cursor: pointer; font-weight: 600; padding: 2px 0; }
+.fl-adv[open] > summary { margin-bottom: 8px; }
+.fl-adv .id-sources { margin: 6px 0; }
+.fl-adv p { margin: 6px 0 0; }
 
 /* the flasher's log: the time in its column, the lines wrapping, its own scroll */
 /* the steps as tall as they need (scrolling once the log is down to its minimum), the log the rest */
