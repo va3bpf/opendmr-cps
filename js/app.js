@@ -2981,7 +2981,7 @@ function setConnected(on) {
         showRadio();
         status(t('notConnected'));
     }
-    if (tab === 'dmrIds' || tab === 'debug' || tab === 'languages') { // their buttons and "not connected" follow the link (debug: its status)
+    if (tab === 'dmrIds' || tab === 'debug' || tab === 'languages' || tab === 'flasher') { // their buttons and "not connected" follow the link (debug: its status)
         render();
     }
 }
@@ -3008,6 +3008,29 @@ async function connect() {
     }
     await refreshRadio();
 }
+
+// A port connected without an answering radio is asked again every 2.5 s, so the page follows it by itself: a radio
+// switched on, one back from the flasher's bootloader, one that got OpenDMR. Not while the flasher has the port.
+let probing = false;
+setInterval(async () => {
+    if (!link?.connected || link.suspended || radio || probing) {
+        return;
+    }
+    probing = true;
+    try {
+        const info = await link.radioInfo();
+        if (link?.connected && !link.suspended) {
+            radio = info;
+            showRadio();
+            setConnected(true);
+            status(t('connected'));
+        }
+    } catch (e) {
+        // still nothing answering
+    } finally {
+        probing = false;
+    }
+}, 2500);
 
 // What answers on the connected port: OpenDMR (its info shown), or nothing (the port stays connected: a stock radio,
 // one switched off, the flasher's bootloader steps)
