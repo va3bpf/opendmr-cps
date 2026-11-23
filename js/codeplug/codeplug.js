@@ -175,6 +175,34 @@ function setAscii(b, at, n, text) {
     });
 }
 
+// The APRS symbols (the primary and alternate tables' characters, 0x21 to 0x7E) with their names, as the old CPS and
+// the APRS spec's symbol tables have them: the symbol is the character, its code minus 33 the index in the config
+export const APRS_SYMBOL_NAMES = {
+    '!': 'Police', '#': 'Digipeater', '$': 'Phone', '%': 'DX cluster', '&': 'HF gateway', "'": 'Aircraft',
+    '(': 'Mobile satellite', ')': 'Wheelchair', '*': 'Snowmobile', '+': 'Red cross', ',': 'Boy scouts', '-': 'House',
+    '.': 'X', '/': 'Y', ':': 'Fire', ';': 'Campground', '<': 'Motorcycle', '=': 'Railroad', '>': 'Car', '?': 'Server',
+    '@': 'Hurricane', A: 'Aid station', B: 'BBS', C: 'Canoe', E: 'Eyeball', F: 'Tractor', G: 'Grid square',
+    H: 'Hotel', I: 'TCP/IP', K: 'School', M: 'MacAPRS', N: 'NTS', O: 'Balloon', P: 'Police', R: 'RV', S: 'Shuttle',
+    T: 'SSTV', W: 'Weather', X: 'X', Y: 'Yacht', '[': 'Weather site', a: 'Ambulance', b: 'Bike', c: 'Coast guard',
+    f: 'Fire truck', h: 'Hospital', j: 'Jeep', k: 'Truck', m: 'Mic-E', n: 'Node', u: 'Bus', v: 'Van',
+};
+
+// [character, label] for the symbol picker: every character of the two tables, its name when it has one
+export function aprsSymbolChoices() {
+    const choices = [];
+    for (let code = 0x21; code <= 0x7E; code++) {
+        const ch = String.fromCharCode(code);
+        const name = APRS_SYMBOL_NAMES[ch] || ((code >= 0x30 && code <= 0x39) ? 'Number' : '');
+        choices.push([ch, name ? `${ch}  ${name}` : ch]);
+    }
+    return choices;
+}
+
+// The character of a configuration's symbol (icon: the index, table: 0 primary / 1 alternate)
+export function aprsSymbolOf(config) {
+    return String.fromCharCode(33 + (config.icon & 0x7F));
+}
+
 export function newAprsConfig(name = 'APRS') {
     return {name, ssid: 7, via1: 'WIDE1', via1Ssid: 1, via2: 'WIDE2', via2Ssid: 1, iconTable: 0, icon: 58, // '[': a person (a handheld)
         comment: '', ambiguity: 0, usePosition: false, latitude: null, longitude: null, txFrequency: 0, qsy: false,

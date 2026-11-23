@@ -493,3 +493,28 @@ button.more { margin: 6px 4px; width: calc(100% - 8px); justify-content: center;
 .lang-row { display: grid; gap: 2px; }
 .lang-row > div:first-child { display: flex; align-items: center; gap: 6px; }
 .lang-row .muted { font-size: 12px; padding-left: 24px; }
+
+/* the flasher: the notes under its cards */
+.fl-notes { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.55; }
+.fl-notes li + li { margin-top: 6px; }
+
+/* the flasher's log: the time in its column, the lines wrapping, its own scroll */
+.fl-log { max-height: 260px; overflow: auto; border: 1px solid var(--line, #0002); border-radius: 8px;
+  padding: 8px 10px; background: #00000008; font: 12.5px/1.5 ui-monospace, Consolas, monospace; }
+@media (prefers-color-scheme: dark) { .fl-log { background: #ffffff0a; } }
+.fl-log-line { white-space: pre-wrap; word-break: break-word; }
+.fl-log-time { opacity: .55; }
+.fl-log-line.ok { color: #15803d; }
+.fl-log-line.bad { color: #b91c1c; }
+
+/* the flasher's working panel: what it is doing now, at the top of its page */
+.fl-live { position: sticky; top: 0; z-index: 3; margin: 0 0 14px; padding: 10px 14px; border-radius: 10px;
+  border: 1px solid var(--line, #0002); background: var(--panel, #fff); opacity: .75; }
+.fl-live.on { opacity: 1; box-shadow: 0 4px 14px #0002; }
+@media (prefers-color-scheme: dark) { .fl-live { background: var(--panel, #1b1e24); } }
+.fl-live-row { display: flex; gap: 10px; align-items: baseline; }
+.fl-live-tag { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; opacity: .6; }
+.fl-live-text { font-weight: 600; }
+.fl-live-bar { height: 6px; margin-top: 8px; border-radius: 4px; background: #0001; overflow: hidden; }
+@media (prefers-color-scheme: dark) { .fl-live-bar { background: #fff2; } }
+.fl-live-bar i { display: block; height: 100%; width: 0; background: #2563eb; transition: width .15s linear; }

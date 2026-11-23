@@ -3,7 +3,7 @@
 import {t, applyTexts, toggleLanguage} from './i18n.js';
 import {icon, applyIcons} from './icons.js';
 import {Codeplug, MODES, P25_NAC_ANY, NXDN_RAN_MAX, M17_CAN_MAX, CALL_TYPES, POWER_LEVELS, STEPS_HZ, toneChoices, frequencyValid, LOCKOUTS_MAX,
-    TA_TX, APRS_CONFIGS_MAX, newAprsConfig, CustomDataDamaged} from './codeplug/codeplug.js';
+    TA_TX, APRS_CONFIGS_MAX, newAprsConfig, CustomDataDamaged, aprsSymbolChoices, aprsSymbolOf} from './codeplug/codeplug.js';
 import * as L from './codeplug/layout.js';
 import {RadioLink, SPEED_MAX, SPEED_MIN, SPEED_SETTING_KEY, radioBaud} from './radio/link.js';
 import {GROUPS, SETTINGS, SETTINGS_SIZE} from './codeplug/settings.js';
@@ -19,6 +19,7 @@ import * as LG from './codeplug/languages.js';
 import * as gb from './gb2312.js';
 import * as CSV from './codeplug/csv.js';
 import {makeZip, readZip, isZip} from './codeplug/zip.js';
+import {createFlasher} from './flasher.js';
 
 const FILE_MAGIC = 'OPENDMR-CPS 1\n'; // our codeplug file: this line, then the window image (layout.js IMAGE_SIZE)
 
@@ -234,7 +235,7 @@ function render() {
     main.replaceChildren();
     ({channels: viewChannels, zones: viewZones, contacts: viewContacts, rxGroups: viewRxGroups, vfo: viewVfo,
         general: viewGeneral, radioSettings: viewRadioSettings, satellites: viewSatellites, dmrIds: viewDmrIds,
-        lockouts: viewLockouts, aprs: viewAprs, debug: viewDebug, themes: viewThemes, languages: viewLanguages})[tab](main);
+        lockouts: viewLockouts, aprs: viewAprs, debug: viewDebug, themes: viewThemes, languages: viewLanguages, flasher: flasherView.view})[tab](main);
 }
 
 function pageHead(title, ...rest) {
@@ -1024,8 +1025,9 @@ function viewAprs(main) {
                 field('SSID', select(ssids, c.via2Ssid, (v) => set('via2Ssid')(+v)), {help: 'helpViaSsid'}),
                 field(t('iconTable'), select([[0, t('iconPrimary')], [1, t('iconAlternate')]], c.iconTable,
                     (v) => set('iconTable')(+v)), {help: 'helpIconTable'}),
-                field(t('aprsIcon'), valueInput(c.icon, set('icon'), (s) => ((s.length === 1 && s >= '!' && s <= '~') ?
-                    s.charCodeAt(0) - 33 : null), (v) => String.fromCharCode(v + 33)), {help: 'helpAprsIcon'}),
+                field(t('aprsIcon'), select(aprsSymbolChoices(), aprsSymbolOf(c),
+                    (v) => set('icon')(Math.max(0, Math.min(93, (v || '!').charCodeAt(0) - 33)))),
+                    {help: 'helpAprsIcon'}),
                 field(t('comment'), asciiInput(c.comment, 24, set('comment'), false), {wide: true, help: 'helpComment'}),
                 field(t('baud'), select([[0, '1200'], [1, '300']], c.baud300 ? 1 : 0, (v) => set('baud300')(v === '1')),
                     {help: 'helpBaud'}),
@@ -3329,6 +3331,24 @@ async function importCsv(fileList) {
         el('textarea', {rows: Math.min(16, lines.length + 1), readOnly: true, value: lines.join('\n')})),
     [[t('close'), null, 'primary']]);
 }
+
+/* ---- the flasher ---- */
+
+// The cable link closed from the flasher (the update and the bootloader take the port at the byte level)
+async function disconnectLink() {
+    if (link) {
+        await link.close().catch(() => {});
+    }
+    link = null;
+    radio = null;
+    setConnected(false);
+    status(t('notConnected'));
+}
+
+const flasherView = createFlasher({
+    el, pageHead, toast, status, progress, getLink: () => link, getRadio: () => radio, disconnect: disconnectLink,
+    rerender: () => render(),
+});
 
 /* ---- start ---- */
 

@@ -22,6 +22,7 @@ const PATHS = {
     scan: 'M20 12a8 8 0 1 1-2.3-5.7 M20 4v4h-4',
     trash: 'M4 7h16 M9 7V4h6v3 M6 7l1 13h10l1-13',
     search: 'M11 18a7 7 0 1 0 0-14a7 7 0 1 0 0 14 M16 16l5 5',
+    chip: 'M7 7h10v10H7z M10 3v4 M14 3v4 M10 17v4 M14 17v4 M3 10h4 M3 14h4 M17 10h4 M17 14h4',
     x: 'M6 6l12 12 M18 6L6 18',
     up: 'M12 19V5 M6 11l6-6 6 6',
     down: 'M12 5v14 M6 13l6 6 6-6',
