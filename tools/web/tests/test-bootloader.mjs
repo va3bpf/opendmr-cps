@@ -2,6 +2,13 @@
 //   node tools/web/tests/test-bootloader.mjs
 import {Bootloader, CHIP_PROGRAM} from '../../../js/radio/bootloader.js';
 import {crc32} from '../../../js/codeplug/oddb.js';
+import {setRelease} from '../../../js/radio/assets.js';
+
+// The programs the radio runs come from the chosen OpenDMR release folder: a stand-in one (the simulated radio does
+// not run them)
+await setRelease([{path: 'OpenDMR-test/opendmr.bin', data: new Uint8Array(4096)},
+    {path: 'OpenDMR-test/tools/debug/updater/updater.bin', data: new Uint8Array(3500)},
+    {path: 'OpenDMR-test/tools/backup/dumper/dumper.bin', data: new Uint8Array(4700)}]);
 
 const BOOT_REQUEST = new Uint8Array([0x02, 0x24, 0x00, 0x03]);
 const BOOT_ANSWER = new Uint8Array([0x02, 0x14, 0x00, 0x03]);

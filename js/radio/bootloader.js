@@ -1,6 +1,6 @@
 // The DM-32's chip bootloader (as tools/backup/dm32_dump.py): the radio switched off, this waits for the bootloader's
-// request at power on, answers it, loads the flash reader (dumper-bin.js, built from tools/backup/dumper/dumper.c)
-// into the RAM, starts it, and reads a whole chip:
+// request at power on, answers it, loads the flash reader (tools/backup/dumper/dumper.bin of the chosen OpenDMR
+// release, assets.js) into the RAM, starts it, and reads a whole chip:
 //
 //   bootloader at power on: 02 24 00 03 -> 02 14 00 03
 //   256-byte blocks: 02 18 sum(4 + payload) 03 + addr(4) 00 00 00 40 data(256) -> 02 05 00 03
@@ -225,13 +225,57 @@ export class Bootloader {
         const out = new Uint8Array(size);
         this.shown = 0;
         this.screen = new Screen(this.s);
-        await this.screen.line('title', 'Copia de seguridad');
-        await this.screen.line('chip', chip === CHIP_DATA ? 'Datos 25Q128' : 'Programa', GREY);
-        await this.screen.line('chip', 'No apagar', RED);
+        await this.screen.line('title', 'Backup');
+        await this.screen.line('chip', chip === CHIP_DATA ? 'Data flash' : 'Program flash', GREY);
+        await this.screen.line('id', 'Do not power off', RED);
         await this.screen.line('percent', '0%');
         await this.readChip(chip, out, onBlock, shouldStop);
-        await this.screen.line('title', 'Copia lista', GREEN);
+        await this.verify(chip, out);
+        await this.screen.line('title', 'Backup done', GREEN);
         return {id, size, data: out};
+    }
+
+    // A backup read checked against the chip once more: the radio's CRC of every sector against the bytes received,
+    // a sector that differs read again (twice), else an error: no backup file that is not the chip's
+    async verify(chip, out) {
+        await this.screen?.line('chip', 'Checking', GREY);
+        const count = Math.floor(out.length / BLOCK);
+        const have = await this.sectorCrcs(chip, 0, count);
+        for (let i = 0; i < count; i++) {
+            for (let attempt = 0; crc32(out.subarray(i * BLOCK, (i + 1) * BLOCK)) !== have[i]; attempt++) {
+                if (attempt >= 2) {
+                    throw new Error(`the backup differs from the chip at 0x${(i * BLOCK).toString(16)}`);
+                }
+                const [data] = await this.readBlocks(chip, i * BLOCK, 1);
+                if (data) {
+                    out.set(data, i * BLOCK);
+                }
+            }
+        }
+    }
+
+    // The sector of the factory calibration in a data flash image, as the firmware finds it (src/services/
+    // factory_cal.c): the first 4 KB sector from 0x1000 below 0xC9000 whose last byte is 0x02 and whose first UHF and
+    // VHF calibration frequencies (BCD, 10 Hz) are in their bands; -1 when none
+    static calibrationSector(image) {
+        const bcd = (at) => {
+            let v = 0;
+            for (let k = 3; k >= 0; k--) {
+                v = (v * 100) + ((image[at + k] >> 4) * 10) + (image[at + k] & 0x0F);
+            }
+            return v;
+        };
+        for (let at = 0x1000; at + BLOCK <= Math.min(0xC9000, image.length); at += BLOCK) {
+            if (image[at + BLOCK - 1] !== 0x02) {
+                continue;
+            }
+            const uhf = bcd(at + 0x300);
+            const vhf = bcd(at + 0x328);
+            if (uhf >= 38000000 && uhf <= 48000000 && vhf >= 13000000 && vhf <= 18000000) {
+                return at;
+            }
+        }
+        return -1;
     }
 
     // Bootloader, reader, speed: the radio off, this waiting, then switched on
@@ -312,8 +356,8 @@ export class Bootloader {
         }
         this.shownWrite = 0;
         this.screen = new Screen(this.s);
-        await this.screen.line('title', opts.offset ? 'Instalando' : 'Escribiendo copia');
-        await this.screen.line('chip', 'No apagar', RED);
+        await this.screen.line('title', opts.offset ? 'Installing' : 'Writing backup');
+        await this.screen.line('chip', 'Do not power off', RED);
         await this.screen.line('percent', '0%');
         let skip = 0;
         if (chip === CHIP_PROGRAM && !opts.writeBoot) {
@@ -353,7 +397,7 @@ export class Bootloader {
         if (bad.length) {
             throw new Error(`${bad.length} sectors still differ, first 0x${(offset + (bad[0] * BLOCK)).toString(16)}`);
         }
-        await this.screen.line('title', 'Listo', GREEN);
+        await this.screen.line('title', 'Done', GREEN);
         return written;
     }
 }

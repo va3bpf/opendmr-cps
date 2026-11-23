@@ -9,7 +9,7 @@ Current version **0.12.0** ([changelog](CHANGELOG.md)).
 
 - Channels (FM / DMR / P25 / NXDN / M17 / AM / USB / LSB; the NAC of P25, the RAN of NXDN, the CAN of M17), zones, contacts, TG lists, APRS configurations, VFO A / B, callsign and DMR ID
 - The radio's menu settings (general, radio, display, sound, APRS); power 50 mW – 10 W, each channel and VFO its own
-- APRS: the configurations, with a list of the 94 symbols (primary and alternate tables)
+- APRS: the configurations, the symbol picked from a list of the 94 characters
 - Amateur satellites: tick one to put it in the radio; orbits fetched by themselves (AMSAT / CelesTrak)
 - DMR ID database: from a CSV (radioid.net's user.csv, downloaded with a click), by country; the radio
   then shows callers' callsigns, names, cities, states and countries (OpenDMR 0.4.0 and later; all the IDs fit, only
@@ -27,39 +27,21 @@ Current version **0.12.0** ([changelog](CHANGELOG.md)).
 
 ## Flasher and backups
 
-The **Flasher** page at the bottom of the sidebar:
+The **Flasher** page (last in the sidebar) works from the unzipped OpenDMR release folder you choose: the firmware
+(`opendmr.bin`) and the two programs it loads into the radio's RAM (`tools/debug/updater/updater.bin`,
+`tools/backup/dumper/dumper.bin`) all come from that folder, so they always belong to the same release.
 
-- **Firmware update**: pick `opendmr.bin` and write it over the programming cable, without the PTT + SK1 upgrade
-  mode. Only the firmware area (0xC000 and up) changes: the bootloader and the factory calibration stay as they are.
-  Each sector is compared by CRC, only the different ones written, and all read back. The same protocol as
-  `tools/debug/fw_update.py`.
-- **The three backups**: the codeplug and settings (radio on, seconds), the program flash (1 MB: firmware and
-  bootloader) and the data flash (16 MB: codeplug, settings, satellites and the factory calibration sector). The last
-  two go through the chip bootloader: switch the radio off, the page waits for it at power on.
-- **Writing a backup back**: only the sectors that differ are written, then all compared; writing the program flash
-  leaves the bootloader below 0xC000 alone.
+1. **Backups**: the codeplug and settings (radio on, seconds), the program flash (1 MB) and the data flash (16 MB, with
+   the radio's factory calibration). The last two go through the chip bootloader (radio off, then on) and are checked
+   against the radio sector by sector once read.
+2. **Install or update**: **Update** writes the sectors that differ over the programming cable, without the PTT + SK1
+   upgrade mode, as OpenDMR's `tools/debug/fw_update.py`; **Install / rewrite all** writes the whole firmware area;
+   **Install on a stock radio** goes through the chip bootloader.
+3. **Back to the stock firmware**: writes the radio's own backups back. A data flash backup is only written when its
+   factory calibration sector matches the radio's.
 
-While the flasher works, a panel at the top of its page says what it is doing and how far it is, and the radio's
-screen shows the same (title, "Do not power off", the percentage).
-The page goes in three steps, in order: **1 the backups**, **2 install or update**, **3 back to the stock
-firmware**, plus a **Log** card that can be saved to a file.
-Three ways to write: **Update** (the sectors that differ), **Install / rewrite all** (the whole firmware area) and
-**Bootloader** (radio off, then on): install OpenDMR on a stock radio (`opendmr.bin`, written from 0xC000) or go
-back to factory (the radio's own program flash backup, plus the data flash one if wanted). The factory buttons
-check they get the right file.
-
-The two programs the radio runs are in `assets/` (`updater.bin`, `dumper.bin`): served from the folder
-(`py serve.py`) the page reads those files; opened from disk (`opendmr-cps.html`, file:// does not allow reading
-files) it uses identical copies embedded in the page. After rebuilding either, run `py tools/web/embed_bin.py`:
-it updates `assets/` and the embedded copies together.
-
-For a folder to upload: `py tools/web/make_folder.py` makes `dist/web/` (the page's sources + `js/` + `assets/`
-+ `firmware/` + `serve.py`), ready for any HTTP server; the page reads `firmware/index.json` by itself.
-
-To hand it to someone who does not know computers: `py tools/web/make_package.py` makes
-`dist/paquete/OpenDMR-CPS/` (`Abrir CPS.bat`, `opendmr-cps.html`, the two bins in `programas/`, a formatted
-`LEEME-PRIMERO.html` and the plain text one) and the same as a zip: unzip, double-click `Abrir CPS.bat`,
-nothing to install.
+Only the firmware area (0xC000 and up) of the program flash is ever written; the bootloader below it stays. The radio's
+screen and a log on the page show each step; the log can be saved to a file.
 
 ## Use
 
@@ -84,8 +66,4 @@ from a file on disk).
 - `py release.py`: makes the release page `opendmr-cps.html` (everything in one file, as small as it gets). Run it after
   changing the sources; needs `py -m pip install rjsmin rcssmin minify-html zopfli` first
 - `py build.py`: makes a readable `opendmr-cps-debug.html`, to debug the page opened from disk
-- `py tools/web/make_folder.py`: makes `dist/web/`, the page as a folder for a web server (modules + `assets/`);
-  `py tools/web/embed_bin.py`: copies `tools/debug/updater/updater.bin` and `tools/backup/dumper/dumper.bin`
-  to `assets/` and remakes the embedded copies
-- tests (no radio): `node tools/web/tests/test-updater.mjs`, `test-bootloader.mjs`, `test-assets.mjs`, and
-  `py build.py && node tools/web/tests/test-page.mjs` (needs jsdom)
+- tests (no radio, Node 18+): `node tools/web/tests/test-updater.mjs`, `test-bootloader.mjs`, `test-screen.mjs`

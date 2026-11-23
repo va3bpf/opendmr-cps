@@ -1,6 +1,6 @@
 // Firmware update over the running firmware, as tools/debug/fw_update.py: 'D' 'U' "UPD!" makes the firmware stop and
-// hand its RAM to the update program (updater-bin.js, built from tools/debug/updater/updater.c), which this drives to
-// write the program flash's firmware area [0xC000, 0xDE000). The bootloader below stays as it is: the upgrade mode
+// hand its RAM to the update program (tools/debug/updater/updater.bin of the chosen OpenDMR release, assets.js), which
+// this drives to write the program flash's firmware area [0xC000, 0x100000). The bootloader below stays as it is: the upgrade mode
 // (PTT + SK1) still works whatever happens here.
 //
 //   'H'                          -> "UPD1" (also once at the start)
@@ -15,6 +15,7 @@ import {RawPort} from './serial.js';
 import {updaterImage} from './assets.js';
 import {Screen, GREEN, RED} from './screen.js';
 import {crc32} from '../codeplug/oddb.js';
+import {RadioLink, radioBaud} from './link.js';
 
 const UART_CLOCK = 84000000 / 16;   // the radio's UART: baud = UART_CLOCK / divisor
 const FAST_DIVISORS = [7, 14, 21];  // 750000, 375000, 250000 baud
@@ -23,7 +24,7 @@ const SWITCH_SETTLE_MS = 50;
 const UPDATER_AREA = 0x44400;       // tools/debug/updater/updater.ld
 const SECTOR = 4096;
 const FLASH_BASE = 0xC000;          // the firmware area of the program flash
-const FLASH_END = 0xDE000;
+const FLASH_END = 0x100000;         // the end of the 1 MB program flash (OpenDMR 0.8.1 and later)
 export const LOADER_MARKER = 'DM32-SERIAL-UPDATE-LOADER-1'; // src/services/serial_update.c, in the image
 
 const ERRORS = {
@@ -136,14 +137,17 @@ export class Updater {
         return null;
     }
 
-    // The fastest speed the cable takes; the radio goes back to the old one if 'H' does not come
+    // The fastest speed the cable takes, or the one chosen in the toolbar (RadioLink.speed, as fw_update.py --baud);
+    // the radio goes back to the old one if 'H' does not come
     async speedUp() {
-        for (const divisor of FAST_DIVISORS) {
+        const chosen = (RadioLink.speed === 'auto') ? null : radioBaud(RadioLink.speed);
+        const divisors = chosen ? [Math.round(UART_CLOCK / chosen)] : FAST_DIVISORS;
+        for (const divisor of divisors) {
             const baud = Math.round(UART_CLOCK / divisor);
             if (this.s.baud === baud) {
                 return;
             }
-            if (this.s.baud > baud) {
+            if (this.s.baud > baud && !chosen) { // auto: already faster (a run cut short)
                 continue;
             }
             const old = this.s.baud;
@@ -290,8 +294,8 @@ export class Updater {
         await this.start();
         await this.speedUp();
         this.screen = new Screen(this.s);
-        await this.screen.line('title', 'Actualizando');
-        await this.screen.line('chip', 'No apagar', RED);
+        await this.screen.line('title', 'Updating');
+        await this.screen.line('chip', 'Do not power off', RED);
         await this.screen.line('percent', '0%');
         let written = 0;
         let shown = 0;
@@ -332,8 +336,8 @@ export class Updater {
                 'stays in the update: run again)');
         }
         // a moment on the screen before the radio goes: the last message is read
-        await this.screen.line('title', written === 0 ? 'Ya esta al dia' : 'Listo', GREEN);
-        await this.screen.line('chip', 'Reiniciando', GREEN);
+        await this.screen.line('title', written === 0 ? 'Up to date' : 'Done', GREEN);
+        await this.screen.line('chip', 'Restarting', GREEN);
         await new Promise((resolve) => setTimeout(resolve, 700));
         await this.restart();
         return written;

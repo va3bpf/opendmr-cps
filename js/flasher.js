@@ -1,6 +1,7 @@
 // The flasher page: firmware update over the programming cable, and the three backups of the radio (the codeplug, the
-// program flash, the whole data flash). The update is tools/debug/fw_update.py in the browser; the backups are
-// tools/backup/dm32_dump.py, through the chip bootloader (radio off, then switched on).
+// program flash, the whole data flash). The update is OpenDMR's tools/debug/fw_update.py in the browser; the backups
+// are its tools/backup/dm32_dump.py, through the chip bootloader (radio off, then switched on). The firmware and the
+// two programs the radio runs for these come from the OpenDMR release folder the user chooses (radio/assets.js).
 //
 // Everything it does is written to the page's log (a card at the bottom), with the time, so a session can be read
 // back or saved and sent.
@@ -10,59 +11,13 @@ import {icon} from './icons.js';
 import {RawPort} from './radio/serial.js';
 import {Updater, prepareImage} from './radio/updater.js';
 import {Bootloader, CHIP_DATA, CHIP_PROGRAM} from './radio/bootloader.js';
+import {setRelease, currentRelease, ReleaseMissing} from './radio/assets.js';
+import {crc32} from './codeplug/oddb.js';
 import * as L from './codeplug/layout.js';
 
 const PROGRAM_SIZE = 1 << 20;          // the GD25Q80
 const DATA_SIZE = 16 << 20;            // the 25Q128
 const FIRMWARE_BASE = 0xC000;          // where opendmr.bin starts in the program flash
-
-// The firmware the package's page carries (make_package.py puts it before the page's own script): {name, b64}. The
-// repo's page has none, and the flasher asks for a file as before.
-function packageFirmware() {
-    try {
-        const fw = typeof window !== 'undefined' ? window.__OPENDMR_FIRMWARE : null;
-        if (!fw?.b64) {
-            return null;
-        }
-        const bin = atob(fw.b64);
-        const bytes = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) {
-            bytes[i] = bin.charCodeAt(i);
-        }
-        return {name: fw.name || 'opendmr.bin', size: bytes.length, image: prepareImage(bytes)};
-    } catch (e) {
-        console.warn('the packaged firmware is not usable:', e);
-        return null;
-    }
-}
-
-// The firmware in the page's own folder (a web server, py serve.py, tools/web/make_folder.py): firmware/index.json
-// lists it. Nothing to look for either: it is loaded and offered as the one to write.
-async function folderFirmware() {
-    try {
-        const root = (typeof document !== 'undefined' && document.baseURI) ? document.baseURI : null;
-        if (!root || typeof fetch !== 'function') {
-            return null;
-        }
-        const index = await fetch(new URL('firmware/index.json', root), {cache: 'no-store'});
-        if (!index.ok) {
-            return null;
-        }
-        const list = await index.json();
-        const first = list?.[0];
-        if (!first?.name) {
-            return null;
-        }
-        const reply = await fetch(new URL('firmware/' + encodeURIComponent(first.name), root), {cache: 'no-store'});
-        if (!reply.ok) {
-            return null;
-        }
-        const bytes = new Uint8Array(await reply.arrayBuffer());
-        return {name: first.name, size: bytes.length, image: prepareImage(bytes)};
-    } catch (e) {
-        return null;
-    }
-}
 
 function clock() {
     const now = new Date();
@@ -75,21 +30,14 @@ export function createFlasher(deps) {
     const {el, pageHead, toast, status, progress, getLink, getRadio, disconnect, rerender} = deps;
     const state = {
         busy: false,
-        firmware: null,      // {name, size, image}
-        fromPackage: false,  // the firmware comes inside the page (the package's): no file to look for
-        firmwareTried: false,
+        firmware: null,      // {name, size, image}: the release's opendmr.bin, or another file chosen
+        fromRelease: false,
         log: [],             // {time, text, kind}: what the page has done, shown in the log card
         logBox: null,        // the element it is drawn in, while the page is there
         liveText: '',        // what it is doing now, in the panel at the top
         livePercent: 0,
         liveBox: null,       // {text, bar}: the panel's elements, while the page is there
     };
-
-    const included = packageFirmware();
-    if (included) {
-        state.firmware = included;
-        state.fromPackage = true;
-    }
 
     /* ---- the log ---- */
 
@@ -378,17 +326,46 @@ export function createFlasher(deps) {
 
     const doProgram = busyGuard(async (portPromise) => {
         logLine(`—— ${t('flBackupProgram')}`);
-        await bootloaderBackup(portPromise, CHIP_PROGRAM, `${radioName()}-programa.bin`);
+        await bootloaderBackup(portPromise, CHIP_PROGRAM, `${radioName()}-program.bin`);
     });
 
     const doData = busyGuard(async (portPromise) => {
         logLine(`—— ${t('flBackupData')}`);
-        await bootloaderBackup(portPromise, CHIP_DATA, `${radioName()}-datos-25q128.bin`);
+        await bootloaderBackup(portPromise, CHIP_DATA, `${radioName()}-data-25q128.bin`);
     });
 
-    const doRestore = busyGuard(async (portPromise, file, chip, expect) => {
+    // Before a data flash backup goes back: its factory calibration sector must be the one this radio has (the same
+    // place, the same bytes). A backup of another radio would write that radio's calibration into this one.
+    async function checkSameRadio(boot, data) {
+        const at = Bootloader.calibrationSector(data);
+        if (at < 0) {
+            throw new Error(t('flNoCalInBackup'));
+        }
+        const [radio] = await boot.sectorCrcs(CHIP_DATA, at, 1);
+        if (radio !== crc32(data.subarray(at, at + 4096))) {
+            throw new Error(t('flNotThisRadio').replace('{at}', '0x' + at.toString(16)));
+        }
+        logLine(`${t('flSameRadio')} (0x${at.toString(16)})`);
+    }
+
+    // source: {name, data}; chip and expect: the program flash with the firmware ('image', written from 0xC000) or
+    // a 1 MB program flash backup ('backup'), or the data flash ('backup')
+    const doRestore = busyGuard(async (portPromise, source, chip, expect) => {
         logLine(`—— ${expect === 'image' ? t('flInstallStock') : chip === CHIP_DATA
-            ? t('flFactoryData') : t('flFactoryProgram')}: ${file.name}`);
+            ? t('flFactoryData') : t('flFactoryProgram')}: ${source.name}`);
+        const data = source.data;
+        if (!data.length || (data.length % 4096)) {
+            throw new Error(t('flBadBackup'));
+        }
+        if (chip === CHIP_PROGRAM && expect === 'image' && data.length === PROGRAM_SIZE) {
+            throw new Error(t('flWrongFileImage'));
+        }
+        if (chip === CHIP_PROGRAM && expect === 'backup' && data.length !== PROGRAM_SIZE) {
+            throw new Error(t('flWrongFileFactory'));
+        }
+        if (chip === CHIP_DATA && data.length !== DATA_SIZE) {
+            throw new Error(t('flWrongFileData'));
+        }
         const boot = new Bootloader(await portPromise);
         const started = Date.now();
         try {
@@ -396,18 +373,11 @@ export function createFlasher(deps) {
             say(t('flSwitchOffOn'));
             logLine(t('flSwitchOffOn'));
             await boot.prepare(() => status(t('flSwitchOffOn')));
-            const data = new Uint8Array(await file.arrayBuffer());
-            if (!data.length || (data.length % 4096)) {
-                throw new Error(t('flBadBackup'));
+            if (chip === CHIP_DATA) {
+                await checkSameRadio(boot, data);
             }
-            if (chip === CHIP_PROGRAM && expect === 'image' && data.length === PROGRAM_SIZE) {
-                throw new Error(t('flWrongFileImage'));
-            }
-            if (chip === CHIP_PROGRAM && expect === 'backup' && data.length !== PROGRAM_SIZE) {
-                throw new Error(t('flWrongFileFactory'));
-            }
-            const offset = (chip === CHIP_PROGRAM && data.length !== PROGRAM_SIZE) ? FIRMWARE_BASE : 0;
-            logLine(`${file.name} · ${(data.length / 1024).toFixed(0)} KB · ` +
+            const offset = (chip === CHIP_PROGRAM && expect === 'image') ? FIRMWARE_BASE : 0;
+            logLine(`${source.name} · ${(data.length / 1024).toFixed(0)} KB · ` +
                 `${chip === CHIP_PROGRAM ? t('flBackupProgram') : t('flBackupData')} · ` +
                 `0x${offset.toString(16)}`);
             let lastStep = -1;
@@ -433,9 +403,53 @@ export function createFlasher(deps) {
         }
     });
 
+    /* ---- the release folder ---- */
+
+    async function pickRelease(files) {
+        try {
+            const release = await setRelease(files);
+            state.firmware = {name: 'opendmr.bin', size: release.files.firmware.length,
+                image: prepareImage(release.files.firmware)};
+            state.fromRelease = true;
+            logLine(`${t('flRelease')}: ${release.name}${release.version ? ' · ' + release.version : ''} · ` +
+                `opendmr.bin ${(state.firmware.size / 1024).toFixed(0)} KB`, 'ok');
+        } catch (e) {
+            const text = (e instanceof ReleaseMissing) ? `${t('flReleaseMissing')}: ${e.message}` : e.message;
+            logLine(t('error') + ': ' + text, 'bad');
+            toast(t('error') + ': ' + text, 8000);
+        }
+        rerender();
+    }
+
+    function releaseText() {
+        const release = currentRelease();
+        return release ? `${release.name}${release.version ? ' · OpenDMR ' + release.version : ''}` : t('flNoRelease');
+    }
+
+    // a button that needs the release folder first (the programs the radio runs come from it)
+    function needsRelease(fn) {
+        return () => {
+            if (!currentRelease()) {
+                toast(t('flPickReleaseFirst'), 6000);
+                logLine(t('flPickReleaseFirst'), 'bad');
+                return;
+            }
+            fn();
+        };
+    }
+
     /* ---- the page ---- */
 
     function view(main) {
+        const folderInput = el('input', {type: 'file', webkitdirectory: true, hidden: true});
+        folderInput.addEventListener('change', () => {
+            const files = folderInput.files;
+            if (files?.length) {
+                pickRelease(files).finally(() => {
+                    folderInput.value = '';
+                });
+            }
+        });
         const fwInput = el('input', {type: 'file', accept: '.bin,application/octet-stream', hidden: true});
         fwInput.addEventListener('change', async () => {
             const file = fwInput.files[0];
@@ -445,7 +459,7 @@ export function createFlasher(deps) {
             }
             try {
                 await pickFirmware(file);
-                state.fromPackage = false;
+                state.fromRelease = false;
                 logLine(`${t('flUseOther')} ${state.firmware.name} · ${(state.firmware.size / 1024).toFixed(0)} KB`);
                 toast(`${state.firmware.name}: ${(state.firmware.size / 1024).toFixed(0)} KB`, 4000);
                 rerender();
@@ -454,36 +468,21 @@ export function createFlasher(deps) {
                 toast(t('error') + ': ' + e.message, 8000);
             }
         });
-        let progExpect = 'image'; // what the program flash picker is for: the firmware, or the 1 MB backup
-        const progInput = el('input', {type: 'file', accept: '.bin,application/octet-stream', hidden: true});
-        progInput.addEventListener('change', () => {
-            const file = progInput.files[0];
-            progInput.value = '';
-            if (file) {
-                withPort((port) => doRestore(port, file, CHIP_PROGRAM, progExpect));
-            }
-        });
-        const dataInput = el('input', {type: 'file', accept: '.bin,application/octet-stream', hidden: true});
-        dataInput.addEventListener('change', () => {
-            const file = dataInput.files[0];
-            dataInput.value = '';
-            if (file) {
-                withPort((port) => doRestore(port, file, CHIP_DATA, 'backup'));
-            }
-        });
-
-        // the firmware of the folder (served): offered without picking a file, as the package's page does
-        if (!state.firmware && !state.firmwareTried) {
-            state.firmwareTried = true;
-            folderFirmware().then((found) => {
-                if (found) {
-                    state.firmware = found;
-                    state.fromPackage = true;
-                    logLine(`${t('flFirmwareIncluded')}: ${found.name} · ${(found.size / 1024).toFixed(0)} KB`);
-                    rerender();
+        // a backup file for the chip: read, then the port (the chooser needs the click; the file dialog was it)
+        const fileInput = (chip) => {
+            const input = el('input', {type: 'file', accept: '.bin,application/octet-stream', hidden: true});
+            input.addEventListener('change', async () => {
+                const file = input.files[0];
+                input.value = '';
+                if (file) {
+                    const data = new Uint8Array(await file.arrayBuffer());
+                    withPort((port) => doRestore(port, {name: file.name, data}, chip, 'backup'));
                 }
             });
-        }
+            return input;
+        };
+        const progInput = fileInput(CHIP_PROGRAM);
+        const dataInput = fileInput(CHIP_DATA);
 
         if (!state.log.length) {
             logLine(t('flLogEmpty'));
@@ -498,11 +497,21 @@ export function createFlasher(deps) {
 
         main.append(pageHead(t('flasher')), live,
             el('div', {class: 'general-cards'},
+                card(t('flReleaseCard'), t('flReleaseIntro'),
+                    el('div', {class: 'id-sources'},
+                        el('button', {class: currentRelease() ? '' : 'primary', onclick: () => folderInput.click()},
+                            icon('open'), t('flPickRelease'))),
+                    el('p', {class: 'muted'}, releaseText()),
+                    el('p', {class: 'muted id-hint'}, t('flReleaseWhere'), ' ',
+                        el('a', {href: 'https://github.com/va3bpf/OpenDMR/releases', target: '_blank',
+                            rel: 'noopener'}, t('flFirmwareLink')))),
                 card(t('flBackupCard'), t('flBackupIntro'),
                     el('div', {class: 'id-sources'},
                         el('button', {onclick: doCodeplug}, icon('download'), t('flBackupCodeplug')),
-                        el('button', {onclick: () => withPort(doProgram)}, icon('download'), t('flBackupProgram')),
-                        el('button', {onclick: () => withPort(doData)}, icon('download'), t('flBackupData'))),
+                        el('button', {onclick: needsRelease(() => withPort(doProgram))}, icon('download'),
+                            t('flBackupProgram')),
+                        el('button', {onclick: needsRelease(() => withPort(doData))}, icon('download'),
+                            t('flBackupData'))),
                     el('p', {class: 'muted id-hint'}, t('flBackupHint')),
                     el('dl', {class: 'info'},
                         el('dt', {}, t('flBackupCodeplug')), el('dd', {}, t('flBackupCodeplugWhat')),
@@ -511,31 +520,27 @@ export function createFlasher(deps) {
                 card(t('flUpdateCard'), t('flUpdateIntro'),
                     el('div', {class: 'id-sources'},
                         el('button', {class: 'primary', disabled: !state.firmware,
-                            onclick: () => withPort((p) => doUpdate(p, false))}, icon('upload'), t('flUpdate')),
-                        el('button', {disabled: !state.firmware, onclick: () => withPort((p) => doUpdate(p, true))},
-                            icon('upload'), t('flInstallAll')),
-                        el('button', {onclick: () => {
-                            progExpect = 'image';
-                            progInput.click();
-                        }}, icon('upload'), t('flInstallStock')),
+                            onclick: needsRelease(() => withPort((p) => doUpdate(p, false)))}, icon('upload'),
+                            t('flUpdate')),
+                        el('button', {disabled: !state.firmware,
+                            onclick: needsRelease(() => withPort((p) => doUpdate(p, true)))}, icon('upload'),
+                            t('flInstallAll')),
+                        el('button', {disabled: !state.firmware, onclick: needsRelease(() => withPort((p) =>
+                            doRestore(p, {name: state.firmware.name, data: state.firmware.image}, CHIP_PROGRAM,
+                                'image')))}, icon('upload'), t('flInstallStock')),
                         el('button', {class: 'ghost', onclick: () => fwInput.click()}, icon('open'), t('flUseOther'))),
                     el('p', {class: 'muted'}, state.firmware
-                        ? (state.fromPackage ? `${t('flFirmwareIncluded')}: ` : '') +
-                          `${state.firmware.name} · ${(state.firmware.size / 1024).toFixed(0)} KB`
+                        ? `${state.fromRelease ? t('flRelease') + ': ' : ''}${state.firmware.name} · ` +
+                          `${(state.firmware.size / 1024).toFixed(0)} KB`
                         : t('flNoFirmware')),
-                    state.fromPackage ? el('p', {class: 'muted id-hint'}, t('flFirmwareIncludedHint')) : null,
                     el('p', {class: 'muted id-hint'}, t('flUpdateHint')),
-                    el('p', {class: 'muted id-hint'}, t('flStep2StockHint')),
-                    el('p', {class: 'muted id-hint'}, t('flFirmwareInFolder'), ' ',
-                        el('a', {href: 'https://github.com/va3bpf/OpenDMR/releases', target: '_blank',
-                            rel: 'noopener'}, t('flFirmwareLink')))),
+                    el('p', {class: 'muted id-hint'}, t('flStep2StockHint'))),
                 card(t('flBootCard'), t('flBootIntro'),
                     el('div', {class: 'id-sources'},
-                        el('button', {onclick: () => {
-                            progExpect = 'backup';
-                            progInput.click();
-                        }}, icon('upload'), t('flFactoryProgram')),
-                        el('button', {onclick: () => dataInput.click()}, icon('upload'), t('flFactoryData'))),
+                        el('button', {onclick: needsRelease(() => progInput.click())}, icon('upload'),
+                            t('flFactoryProgram')),
+                        el('button', {onclick: needsRelease(() => dataInput.click())}, icon('upload'),
+                            t('flFactoryData'))),
                     el('p', {class: 'muted id-hint'}, t('flFactoryFile')),
                     el('p', {class: 'muted id-hint'}, t('flFactoryHint'))),
                 card(t('flLogCard'), t('flLogIntro'),
@@ -553,9 +558,8 @@ export function createFlasher(deps) {
                     el('ul', {class: 'fl-notes'},
                         el('li', {}, t('flNote1')),
                         el('li', {}, t('flNote2')),
-                        el('li', {}, t('flNote3')),
-                        el('li', {}, t('flNote4'))))),
-            fwInput, progInput, dataInput);
+                        el('li', {}, t('flNote3'))))),
+            folderInput, fwInput, progInput, dataInput);
 
         // the log, at its end
         state.logBox.scrollTop = state.logBox.scrollHeight;

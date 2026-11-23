@@ -1,55 +1,68 @@
-// The two programs the radio runs (update program, flash reader) as files: assets/updater.bin and assets/dumper.bin,
-// read when the page is served from a folder (py serve.py, a web server). Opened from disk (file://) the fetch is
-// not allowed: the copies embedded by tools/web/embed_bin.py (js/radio/*-bin.js) are used then, the same bytes.
-//
-// Both are made from their sources in tools/debug/updater/ and tools/backup/dumper/: run tools/web/embed_bin.py after
-// rebuilding either, it writes assets/ and the embedded modules together.
+// The OpenDMR release the flasher writes from: the folder of the unzipped OpenDMR-<version>.zip, chosen by the user
+// (as the Languages page does). Its firmware and the two programs the radio runs for it come from the same release,
+// so they always go together (the firmware area, the protocol): opendmr.bin, tools/debug/updater/updater.bin (the
+// update program) and tools/backup/dumper/dumper.bin (the flash reader of the chip bootloader). OpenDMR's
+// make_release.py builds both programs from their source at every release.
 
-import {updater_bin} from './updater-bin.js';
-import {dumper_bin} from './dumper-bin.js';
+const FILES = {
+    firmware: 'opendmr.bin',
+    updater: 'tools/debug/updater/updater.bin',
+    dumper: 'tools/backup/dumper/dumper.bin',
+    version: 'VERSION.txt',
+};
 
-const loaded = new Map();
-export const sources = {}; // path -> 'assets' or 'embedded', for the page to say where each came from
+let release = null; // {name, version, files: {firmware, updater, dumper}: Uint8Array}
 
-function base() {
-    if (typeof document !== 'undefined' && document.baseURI) {
-        return document.baseURI;
-    }
-    if (typeof location !== 'undefined' && location.href) {
-        return location.href;
-    }
-    return null;
-}
+export class ReleaseMissing extends Error {}
 
-async function fromFile(path, embedded) {
-    if (!loaded.has(path)) {
-        loaded.set(path, (async () => {
-            const root = base();
-            if (root && typeof fetch === 'function') {
-                try {
-                    const reply = await fetch(new URL(path, root), {cache: 'no-store'});
-                    if (reply.ok) {
-                        const data = new Uint8Array(await reply.arrayBuffer());
-                        if (data.length) {
-                            sources[path] = 'assets';
-                            return data;
-                        }
-                    }
-                } catch (e) {
-                    // file://, or the file is not there: the embedded one
+// The files of the chosen folder (an <input webkitdirectory> FileList, or [{path, data}] in tests): the release, or an
+// Error naming what is missing
+export async function setRelease(fileList) {
+    const found = {};
+    let top = '';
+    for (const file of Array.from(fileList)) {
+        const path = (file.webkitRelativePath || file.path || file.name).replaceAll('\\', '/');
+        for (const [key, want] of Object.entries(FILES)) {
+            // the folder may be the release's own or the one above it: its path ends with the file's
+            if ((path === want || path.endsWith('/' + want)) && !found[key]) {
+                found[key] = file;
+                if (key === 'firmware') {
+                    top = path.slice(0, path.length - want.length).replace(/\/$/, '');
                 }
             }
-            sources[path] = 'embedded';
-            return embedded();
-        })());
+        }
     }
-    return loaded.get(path);
+    const missing = ['firmware', 'updater', 'dumper'].filter((k) => !found[k]).map((k) => FILES[k]);
+    if (missing.length) {
+        throw new ReleaseMissing(missing.join(', '));
+    }
+    const bytes = async (file) => (file.data ? new Uint8Array(file.data) : new Uint8Array(await file.arrayBuffer()));
+    const files = {firmware: await bytes(found.firmware), updater: await bytes(found.updater),
+        dumper: await bytes(found.dumper)};
+    let version = '';
+    if (found.version) {
+        const text = new TextDecoder().decode(await bytes(found.version));
+        version = (text.match(/^OpenDMR\s+(\S+)/m) || [])[1] || '';
+    }
+    release = {name: top.split('/').pop() || 'OpenDMR', version, files};
+    return release;
 }
 
-export function updaterImage() {
-    return fromFile('assets/updater.bin', updater_bin);
+export function currentRelease() {
+    return release;
 }
 
-export function dumperImage() {
-    return fromFile('assets/dumper.bin', dumper_bin);
+function need(key) {
+    if (!release) {
+        throw new ReleaseMissing(FILES[key]);
+    }
+    return release.files[key];
+}
+
+export async function updaterImage() {
+    return need('updater');
+}
+
+export async function dumperImage() {
+    return need('dumper');
 }

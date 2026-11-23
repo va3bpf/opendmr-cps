@@ -175,16 +175,21 @@ function setAscii(b, at, n, text) {
     });
 }
 
-// The APRS symbols (the primary and alternate tables' characters, 0x21 to 0x7E) with their names, as the old CPS and
-// the APRS spec's symbol tables have them: the symbol is the character, its code minus 33 the index in the config
+// The APRS symbols: the character (0x21 to 0x7E; its code minus 33 is the index in the config) and its name in the
+// primary table (APRS 1.0.1 appendix 2, aprs.org symbols); the alternate table gives the same characters other meanings
 export const APRS_SYMBOL_NAMES = {
-    '!': 'Police', '#': 'Digipeater', '$': 'Phone', '%': 'DX cluster', '&': 'HF gateway', "'": 'Aircraft',
-    '(': 'Mobile satellite', ')': 'Wheelchair', '*': 'Snowmobile', '+': 'Red cross', ',': 'Boy scouts', '-': 'House',
-    '.': 'X', '/': 'Y', ':': 'Fire', ';': 'Campground', '<': 'Motorcycle', '=': 'Railroad', '>': 'Car', '?': 'Server',
-    '@': 'Hurricane', A: 'Aid station', B: 'BBS', C: 'Canoe', E: 'Eyeball', F: 'Tractor', G: 'Grid square',
-    H: 'Hotel', I: 'TCP/IP', K: 'School', M: 'MacAPRS', N: 'NTS', O: 'Balloon', P: 'Police', R: 'RV', S: 'Shuttle',
-    T: 'SSTV', W: 'Weather', X: 'X', Y: 'Yacht', '[': 'Weather site', a: 'Ambulance', b: 'Bike', c: 'Coast guard',
-    f: 'Fire truck', h: 'Hospital', j: 'Jeep', k: 'Truck', m: 'Mic-E', n: 'Node', u: 'Bus', v: 'Van',
+    '!': 'Police station', '#': 'Digipeater', '$': 'Phone', '%': 'DX cluster', '&': 'HF gateway',
+    "'": 'Small aircraft', '(': 'Mobile satellite station', ')': 'Wheelchair', '*': 'Snowmobile', '+': 'Red Cross',
+    ',': 'Boy Scouts', '-': 'House', '.': 'X', '/': 'Red dot', ':': 'Fire', ';': 'Campground', '<': 'Motorcycle',
+    '=': 'Railroad engine', '>': 'Car', '?': 'File server', '@': 'Hurricane forecast', A: 'Aid station', B: 'BBS',
+    C: 'Canoe', E: 'Eyeball', F: 'Tractor', G: 'Grid square', H: 'Hotel', I: 'TCP/IP', K: 'School', L: 'PC user',
+    M: 'MacAPRS', N: 'NTS station', O: 'Balloon', P: 'Police', R: 'RV', S: 'Space shuttle', T: 'SSTV', U: 'Bus',
+    V: 'ATV', W: 'Weather service site', X: 'Helicopter', Y: 'Yacht', Z: 'WinAPRS', '[': 'Person', '\\': 'DF triangle',
+    ']': 'Mailbox', '^': 'Large aircraft', _: 'Weather station', '`': 'Dish antenna', a: 'Ambulance', b: 'Bicycle',
+    c: 'Incident command post', d: 'Fire station', e: 'Horse', f: 'Fire truck', g: 'Glider', h: 'Hospital',
+    i: 'IOTA', j: 'Jeep', k: 'Truck', l: 'Laptop', m: 'Mic-E repeater', n: 'Node', o: 'EOC', p: 'Dog',
+    q: 'Grid square (2 x 2)', r: 'Repeater', s: 'Ship', t: 'Truck stop', u: 'Semi truck', v: 'Van',
+    w: 'Water station', x: 'xAPRS', y: 'Yagi at QTH',
 };
 
 // [character, label] for the symbol picker: every character of the two tables, its name when it has one

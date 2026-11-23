@@ -2,6 +2,13 @@
 //   node tools/web/tests/test-updater.mjs
 import {Updater, prepareImage} from '../../../js/radio/updater.js';
 import {crc32} from '../../../js/codeplug/oddb.js';
+import {setRelease} from '../../../js/radio/assets.js';
+
+// The programs the radio runs come from the chosen OpenDMR release folder: a stand-in one (the simulated radio does
+// not run them)
+await setRelease([{path: 'OpenDMR-test/opendmr.bin', data: new Uint8Array(4096)},
+    {path: 'OpenDMR-test/tools/debug/updater/updater.bin', data: new Uint8Array(3500)},
+    {path: 'OpenDMR-test/tools/backup/dumper/dumper.bin', data: new Uint8Array(4700)}]);
 
 const UART_CLOCK = 84000000 / 16;
 

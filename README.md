@@ -9,7 +9,7 @@
 
 - 信道（FM / DMR / P25 / NXDN / M17 / AM / USB / LSB；P25 的 NAC，NXDN 的 RAN，M17 的 CAN）、区域、联系人、TG 列表、APRS 配置、VFO A / B、呼号和 DMR ID
 - 电台菜单里的设置（通用、电台、显示、声音、APRS），功率 50 mW – 10 W，每个信道和 VFO 各自的功率
-- APRS：配置页有 94 个符号的下拉列表（主表 / 副表）
+- APRS：符号从 94 个字符的下拉列表里选
 - 业余卫星：勾选即加入电台，轨道自动下载（AMSAT / CelesTrak）
 - DMR ID 数据库：导入 CSV（如 radioid.net 的 user.csv，点一下就能下载），按国家筛选，写入电台后收到呼叫时显示呼号、名字、城市、州/省和国家（OpenDMR 0.4.0 及以后；全部 ID 都存得下，只写变了的部分）
 - 中文名称按 GB2312 写入，电台上正常显示
@@ -22,30 +22,16 @@
 
 ## 刷写与备份
 
-侧栏下面的 **刷写与备份**（Flasher）页：
+侧栏最后的 **刷写与备份**（Flasher）页从你选择的、解压后的 OpenDMR 发布目录读取文件：固件（`opendmr.bin`）和写进电台
+RAM 的两个程序（`tools/debug/updater/updater.bin`、`tools/backup/dumper/dumper.bin`）都来自这个目录，保证是同一个版本。
 
-- **更新固件**：选 `opendmr.bin`，通过写频线写进去，不用 PTT + SK1 升级模式。只写固件区（0xC000 以上），
-  引导程序和出厂校准不动；每个扇区先比 CRC，只写不同的，写完再读回校验。和 `tools/debug/fw_update.py` 同一套协议。
-- **三份备份**：码表和设置（电台开机，几秒）、程序 Flash（1 MB：固件和引导程序）、数据 Flash（16 MB：码表、设置、
-  卫星，以及出厂校准的那个扇区）。后两份走芯片引导程序：电台先关机，页面等它开机时握手。
-- **写回备份**：只写和电台不同的扇区，写完全部校验；写程序 Flash 时 0xC000 以下的引导程序不动。
+1. **备份**：码表和设置（电台开机，几秒）、程序 Flash（1 MB）、数据 Flash（16 MB，含这台电台的出厂校准）。后两份走芯片
+   引导程序（电台关机再开机），读完再和电台逐扇区核对。
+2. **安装或更新**：**更新**通过写频线只写不同的扇区，不用 PTT + SK1 升级模式，和 OpenDMR 的 `tools/debug/fw_update.py`
+   一样；**安装 / 全部重写**写整个固件区；**安装到原厂电台**走芯片引导程序。
+3. **退回原厂固件**：把这台电台自己的备份写回去。数据 Flash 备份只有在出厂校准扇区和电台一致时才写。
 
-刷写时页面顶部会显示在做什么、做到哪一步；电台自己的屏幕也显示同样的内容（标题、「不要断电」、百分比）。
-页面按三步排：**1 先做备份**、**2 安装或更新**、**3 退回原厂固件**；下面还有 **记录** 卡，能存成文件。
-写有三条路：**更新**（只写不同的扇区）、**安装 / 全部重写**（固件区全写）、以及 **引导程序**（电台关机再开机）：
-把 OpenDMR 装到原厂固件的电台（`opendmr.bin`，从 0xC000 写），或者恢复出厂（用这台电台自己的程序 Flash 备份，可加数据 Flash）。
-恢复出厂的按钮会检查拿到的是不是对应的文件。
-
-电台端用的两个程序在 `assets/` 里（`updater.bin`、`dumper.bin`），从文件夹（`py serve.py`）打开时读的是这两个文件；
-从磁盘双击打开 `opendmr-cps.html` 时用页面里内置的同一份副本（`file://` 不许读文件）。重建它们之后跑一次
-`py tools/web/embed_bin.py`：`assets/` 和内置副本一起更新。
-
-要一个可以直接上传的文件夹版本：`py tools/web/make_folder.py` 生成 `dist/web/`（页面源码 + `js/` + `assets/` +
-`firmware/` + `serve.py`），放进任何 HTTP 服务器即可；页面自己读 `firmware/index.json`，不用选文件。
-
-要发给不太懂电脑的人：`py tools/web/make_package.py` 生成 `dist/paquete/OpenDMR-CPS/`（`Abrir CPS.bat`、
-`opendmr-cps.html`、`programas/` 里的两个 bin、排版好的 `LEEME-PRIMERO.html` 和纯文本版）和同名 zip：
-解压，双击 `Abrir CPS.bat` 就行，不用装任何东西。
+程序 Flash 只写固件区（0xC000 以上），下面的引导程序不动。电台屏幕和页面上的记录会显示每一步，记录可以存成文件。
 
 ## 使用
 
@@ -69,8 +55,4 @@
 - `py release.py`：生成发行用的 `opendmr-cps.html`（代码合成一个文件，压缩到最小）。改完源码后运行。
   需要先安装：`py -m pip install rjsmin rcssmin minify-html zopfli`
 - `py build.py`：生成可读的 `opendmr-cps-debug.html`，用于调试从磁盘直接打开的情况
-- `py tools/web/make_folder.py`：生成 `dist/web/`，作为网站用文件夹发布（页面模块 + `assets/`）；
-  `py tools/web/embed_bin.py`：把 `tools/debug/updater/updater.bin` 和 `tools/backup/dumper/dumper.bin`
-  复制到 `assets/` 并重新生成内置副本
-- 测试（不用电台）：`node tools/web/tests/test-updater.mjs`、`test-bootloader.mjs`、`test-assets.mjs`，
-  以及 `py build.py && node tools/web/tests/test-page.mjs`（需要 jsdom）
+- 测试（不用电台，Node 18+）：`node tools/web/tests/test-updater.mjs`、`test-bootloader.mjs`、`test-screen.mjs`
