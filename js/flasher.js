@@ -452,11 +452,6 @@ export function createFlasher(deps) {
             {class: opts.primary ? 'primary' : (opts.ghost ? 'ghost' : ''), disabled: busy || !!opts.disabled, onclick},
             iconName ? icon(iconName) : null, text);
 
-        const folderStep = {
-            title: t('flStepFolder'), done: !!release,
-            sub: release ? `${release.name} · opendmr.bin ${kb(release.files.firmware.length)}` : t('flStepFolderSub'),
-            action: button(release ? t('flChange') : t('flPickRelease'), 'open', chooseFolder, {primary: !release}),
-        };
         const backupStep = (chip, optional = false) => ({
             title: t(chip === CHIP_DATA ? 'flBackupData' : 'flBackupProgram'),
             sub: state.saved[chip] ? `${t('flSaved')}: ${state.saved[chip]}`
@@ -468,7 +463,7 @@ export function createFlasher(deps) {
 
         let panel;
         if (task === 'update') {
-            panel = [stepList([folderStep, {
+            panel = [stepList([{
                 title: t('flUpdate'),
                 sub: radio ? `${t('flRadioNow')}: OpenDMR ${radio.git || ''} · ${t('flUpdateSub')}` : t('flNeedsOpenDmr'),
                 action: button(t('flUpdate'), 'upload', () => withPort((p) => doUpdate(p, false)),
@@ -482,7 +477,7 @@ export function createFlasher(deps) {
                 state.skipBackups = skip.checked;
                 rerender();
             });
-            panel = [stepList([folderStep, backupStep(CHIP_PROGRAM), backupStep(CHIP_DATA), {
+            panel = [stepList([backupStep(CHIP_PROGRAM), backupStep(CHIP_DATA), {
                 title: t('flInstallStock'), done: false,
                 sub: backedUp ? t('flInstallSub') : t('flInstallLocked'),
                 action: button(t('flInstall'), 'upload', () => withPort((p) => doWrite(p, t('flInstallStock'),
@@ -490,7 +485,7 @@ export function createFlasher(deps) {
                 {primary: true, disabled: !release || !state.firmware || !backedUp}),
             }]), el('label', {class: 'fl-skip'}, skip, ' ', t('flSkipBackups'))];
         } else if (task === 'backup') {
-            panel = [stepList([folderStep, {
+            panel = [stepList([{
                 title: t('flBackupCodeplug'),
                 sub: state.saved.codeplug ? `${t('flSaved')}: ${state.saved.codeplug}`
                     : (radio ? t('flBackupCodeplugSub') : t('flNeedsOpenDmr')),
@@ -501,7 +496,7 @@ export function createFlasher(deps) {
             const prog = state.stock[CHIP_PROGRAM];
             const data = state.stock[CHIP_DATA];
             const jobs = [prog && {chip: CHIP_PROGRAM, ...prog}, data && {chip: CHIP_DATA, ...data}].filter(Boolean);
-            panel = [stepList([folderStep, {
+            panel = [stepList([{
                 title: t('flStockProgram'), done: !!prog,
                 sub: prog ? `${prog.name} · ${kb(prog.data.length)}` : t('flStockProgramSub'),
                 action: button(t('flChoose'), 'open', chooseStockProgram),
@@ -548,10 +543,21 @@ export function createFlasher(deps) {
             state.logBox.scrollTop = state.logBox.scrollHeight;
         });
 
+        // what every task works with: the radio on the page's port, and the OpenDMR release folder
+        const status = el('div', {class: 'fl-status'},
+            el('div', {class: 'fl-status-row'},
+                el('span', {class: 'fl-status-label'}, t('flRadioNow')),
+                el('span', {class: 'fl-status-value' + (radio ? '' : ' muted')}, !link?.connected
+                    ? t('flRadioNotConnected') : radio ? `OpenDMR ${radio.git || ''}` : t('flRadioNoAnswer'))),
+            el('div', {class: 'fl-status-row'},
+                el('span', {class: 'fl-status-label'}, t('flStepFolder')),
+                el('span', {class: 'fl-status-value' + (release ? '' : ' muted')}, release
+                    ? `${release.name} · opendmr.bin ${kb(release.files.firmware.length)}` : t('flStepFolderSub')),
+                button(release ? t('flChange') : t('flPickRelease'), 'open', chooseFolder, {primary: !release})));
+
         main.append(pageHead(t('flasher')),
             el('div', {class: 'card form-card fl-card'},
-                el('p', {class: 'muted fl-radio'}, `${t('flRadioNow')}: `, !link?.connected ? t('flRadioNotConnected')
-                    : radio ? `OpenDMR ${radio.git || ''}` : t('flRadioNoAnswer')),
+                status,
                 el('div', {class: 'fl-tasks', role: 'tablist'}, TASKS.map((k) => el('button',
                     {class: 'fl-task' + (k === task ? ' active' : ''), role: 'tab', disabled: busy && k !== task,
                         onclick: () => {

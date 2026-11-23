@@ -496,7 +496,11 @@ button.more { margin: 6px 4px; width: calc(100% - 8px); justify-content: center;
 
 /* the flasher: one card, the tasks as tabs, the task's steps as a numbered list */
 .fl-card { max-width: 760px; }
-.fl-radio { margin: 0 0 12px; }
+.fl-status { display: grid; gap: 8px; margin: 0 0 14px; }
+.fl-status-row { display: grid; grid-template-columns: 110px 1fr auto; gap: 12px; align-items: center; min-height: 32px; }
+.fl-status-label { color: var(--muted); font-size: 13px; }
+.fl-status-value { font-weight: 600; word-break: break-word; }
+.fl-status-value.muted { font-weight: 400; }
 .fl-tasks { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; border-radius: 10px; background: var(--bg);
     border: 1px solid var(--line); }
 .fl-task { flex: 1 1 140px; border: 0; background: transparent; padding: 8px 10px; border-radius: 7px; cursor: pointer;
