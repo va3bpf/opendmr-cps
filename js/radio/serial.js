@@ -63,6 +63,7 @@ export class RawPort {
     }
 
     async stopReader() {
+        this.stopping = true;
         try {
             await this.reader?.cancel();
             await this.reading;
@@ -70,6 +71,7 @@ export class RawPort {
             // the reader was done
         }
         this.reader = null;
+        this.stopping = false;
     }
 
     async close() {
@@ -81,29 +83,37 @@ export class RawPort {
         this.port = null;
     }
 
+    // Reads until stopReader(). A break or framing error (the radio switched off: its line goes low) ends a reader
+    // with an error, and Web Serial gives the port a new readable: read on with it, or the bootloader's request at
+    // power on is never seen (pyserial ignores these errors)
     async readLoop() {
-        const reader = this.port.readable.getReader();
-        this.reader = reader;
-        try {
-            for (;;) {
-                const {value, done} = await reader.read();
-                if (done) {
-                    break;
+        while (!this.stopping && this.port?.readable) {
+            const reader = this.port.readable.getReader();
+            this.reader = reader;
+            try {
+                for (;;) {
+                    const {value, done} = await reader.read();
+                    if (done) {
+                        break;
+                    }
+                    if (value?.length) {
+                        this.chunks.push(value);
+                        this.length += value.length;
+                        this.waiter?.();
+                        this.waiter = null;
+                    }
                 }
-                if (value?.length) {
-                    this.chunks.push(value);
-                    this.length += value.length;
-                    this.waiter?.();
-                    this.waiter = null;
+            } catch (e) {
+                // a line error (read on with a new reader), or the port closing
+            } finally {
+                try {
+                    reader.releaseLock();
+                } catch (e) {
+                    // already released
                 }
             }
-        } catch (e) {
-            // the port closed or the reader was cancelled
-        } finally {
-            try {
-                reader.releaseLock();
-            } catch (e) {
-                // already released
+            if (!this.stopping) {
+                await sleep(10); // a fatal error leaves readable null: the loop ends
             }
         }
     }
