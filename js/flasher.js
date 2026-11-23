@@ -295,6 +295,13 @@ export function createFlasher(deps) {
         toast(t('flBackupDone'), 5000);
     });
 
+    // what went over the cable last, into the log (a failed step)
+    function traceToLog(raw) {
+        for (const line of raw?.trace || []) {
+            logLine('  ' + line);
+        }
+    }
+
     async function bootloaderBackup(portPromise, chip, name) {
         const boot = new Bootloader(await portPromise);
         const started = Date.now();
@@ -319,6 +326,9 @@ export function createFlasher(deps) {
                 `JEDEC ${Array.from(result.id).map((b) => b.toString(16)).join(' ')} · ${seconds} s`, 'ok');
             screenNote(boot.screen);
             toast(t('flBackupDone'), 5000);
+        } catch (e) {
+            traceToLog(boot.s);
+            throw e;
         } finally {
             await boot.close().catch(() => {});
         }
@@ -398,6 +408,9 @@ export function createFlasher(deps) {
             logLine(`${t('flRestoreDone')}: ${written} · ${seconds} s`, 'ok');
             screenNote(boot.screen);
             toast(t('flRestoreDone'), 6000);
+        } catch (e) {
+            traceToLog(boot.s);
+            throw e;
         } finally {
             await boot.close().catch(() => {});
         }

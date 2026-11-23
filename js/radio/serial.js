@@ -97,6 +97,7 @@ export class RawPort {
                         break;
                     }
                     if (value?.length) {
+                        this.note('rx', value);
                         this.chunks.push(value);
                         this.length += value.length;
                         this.waiter?.();
@@ -105,6 +106,9 @@ export class RawPort {
                 }
             } catch (e) {
                 // a line error (read on with a new reader), or the port closing
+                if (!this.stopping) {
+                    this.note('error', null, e?.name || String(e));
+                }
             } finally {
                 try {
                     reader.releaseLock();
@@ -118,7 +122,19 @@ export class RawPort {
         }
     }
 
+    // The last exchanges (for the log when something fails): rx / tx bytes in hex (the first 24), line errors
+    note(kind, bytes, text = '') {
+        this.trace = this.trace || [];
+        const hex = bytes ? Array.from(bytes.subarray(0, 24), (b) => b.toString(16).padStart(2, '0')).join(' ') +
+            (bytes.length > 24 ? ` … (${bytes.length})` : '') : '';
+        this.trace.push(`${(performance.now() / 1000).toFixed(3)} ${kind} ${hex}${text}`);
+        if (this.trace.length > 40) {
+            this.trace.shift();
+        }
+    }
+
     async write(bytes) {
+        this.note('tx', bytes);
         const writer = this.port.writable.getWriter();
         try {
             await writer.write(bytes);
@@ -165,7 +181,7 @@ export class RawPort {
             if (left <= 0) {
                 throw new Error(`no answer (${this.length} of ${n} bytes)`);
             }
-            await this.waitData(left);
+            await this.waitData(left, n);
         }
         return this.take(n);
     }
@@ -239,8 +255,11 @@ export class RawPort {
         }
     }
 
-    async waitData(timeoutMs) {
-        if (this.length) {
+    // Until the queue holds at least need bytes, new ones come, or timeoutMs. Never returns at once with fewer: a loop
+    // of awaits that are already done never lets the reader's next chunk in (read(4) saw "02" and starved for 5 s
+    // waiting for "05 00 03" that had come)
+    async waitData(timeoutMs, need = 1) {
+        if (this.length >= need) {
             return;
         }
         await Promise.race([
