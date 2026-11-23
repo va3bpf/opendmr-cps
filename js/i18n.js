@@ -824,6 +824,7 @@ const TEXTS = {
         'Apagar y encender; el bootloader y la calibración no se tocan'],
     flWriteBack: ['写回…', 'Write back…', 'Escribir…'],
     flWriteDone: ['写入完成', 'Written', 'Escrito'],
+    flAllSame: ['内容相同，写了 0 个扇区', 'Already the same: no sector written', 'Ya es igual: ningún sector escrito'],
     flWrittenSectors: ['写了 {n} 个扇区', '{n} sectors written', '{n} sectores escritos'],
     flWrongFileImage: ['那个文件是 1 MB 的备份，不是固件', 'That file is a 1 MB backup, not the firmware',
         'Ese archivo es una copia de 1 MB, no el firmware'],

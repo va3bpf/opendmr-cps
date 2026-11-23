@@ -217,8 +217,9 @@ export function createFlasher(deps) {
             say(t('flUpdating') + ' …');
             await updater.open();
             let lastStep = -1;
-            const written = await updater.writeImage(firmware.image, (done, total) => {
-                say(`${t('flUpdating')} ${done} / ${total} · ${updater.s.baud} baud`, done, total);
+            const written = await updater.writeImage(firmware.image, (done, total, changed) => {
+                say(`${t('flUpdating')} ${done} / ${total} · ${t('flWrittenSectors').replace('{n}', changed)} · ` +
+                    `${updater.s.baud} baud`, done, total);
                 progress(done, total);
                 const step = Math.floor((done * 20) / total); // a line each 5 %
                 if (step !== lastStep) {
@@ -323,14 +324,16 @@ export function createFlasher(deps) {
                     await checkSameRadio(boot, job.data);
                 }
             }
+            let total = 0;
             for (const job of jobs) {
                 const offset = job.image ? FIRMWARE_BASE : 0;
                 logLine(`${job.name} · ${kb(job.data.length)} · 0x${offset.toString(16)}`);
                 let lastStep = -1;
                 const written = await boot.restore(job.chip, job.data, {
                     offset,
-                    onBlock: (done, total) => {
-                        say(`${job.name}: ${t('flWriting')} ${done} / ${total} · ${boot.s.baud} baud`, done, total);
+                    onBlock: (done, total, changed) => {
+                        say(`${job.name}: ${done} / ${total} · ${t('flWrittenSectors').replace('{n}', changed)} · ` +
+                            `${boot.s.baud} baud`, done, total);
                         progress(done, total);
                         const step = Math.floor((done * 20) / total);
                         if (step !== lastStep) {
@@ -339,12 +342,13 @@ export function createFlasher(deps) {
                         }
                     },
                 });
-                logLine(`${job.name}: ${t('flWrittenSectors').replace('{n}', written)}`, 'ok');
+                total += written;
+                logLine(`${job.name}: ${written ? t('flWrittenSectors').replace('{n}', written) : t('flAllSame')}`, 'ok');
             }
             const seconds = Math.round((Date.now() - started) / 1000);
             say(t('flWriteDone'), 1, 1);
             logLine(`${t('flWriteDone')} · ${boot.s.baud} baud · ${seconds} s`, 'ok');
-            state.finished[task] = `${t('flWriteDone')} ${clock()}`;
+            state.finished[task] = `${t('flWriteDone')} ${clock()} · ${t('flWrittenSectors').replace('{n}', total)}`;
             screenNote(boot.screen);
             toast(t('flWriteDone'), 6000);
         } catch (e) {

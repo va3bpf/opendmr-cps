@@ -311,7 +311,7 @@ export class Updater {
                 shown = percent;
                 await this.screen.line('percent', `${percent}%`);
             }
-            progress?.(n + 1, sectors.length);
+            progress?.(n + 1, sectors.length, written);
         }
         // checked once more before the restart; a sector spoilt on the way is written again
         let bad = [];

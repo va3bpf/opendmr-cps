@@ -372,28 +372,27 @@ export class Bootloader {
             skip = Math.max(0, Math.min(count, Math.floor((0xC000 - offset) / BLOCK))); // the bootloader as it is
         }
         const have = await this.sectorCrcs(chip, offset, count);
-        let todo = [];
-        for (let i = skip; i < count; i++) {
-            if (opts.force || have[i] !== wanted[i]) {
-                todo.push(i);
-            }
-        }
+        // every sector in turn, the same ones passed over: the progress runs through all of them, so it shows even when
+        // nothing differs (the same firmware again)
+        const total = count - skip;
         let written = 0;
-        for (let k = 0; k < todo.length; k++) {
+        for (let i = skip; i < count; i++) {
             if (opts.shouldStop?.()) {
                 throw new Error('stopped');
             }
-            const i = todo[k];
-            await this.writeSector(chip, offset + (i * BLOCK), data.subarray(i * BLOCK, (i + 1) * BLOCK),
-                opts.writeBoot ? 0x80 : 0);
-            written++;
-            await this.progress(k + 1, todo.length);
-            const percent = Math.floor(((k + 1) * 100) / todo.length);
-            if (percent >= (this.shownWrite ?? 0) + 5 || k + 1 === todo.length) {
+            if (opts.force || have[i] !== wanted[i]) {
+                await this.writeSector(chip, offset + (i * BLOCK), data.subarray(i * BLOCK, (i + 1) * BLOCK),
+                    opts.writeBoot ? 0x80 : 0);
+                written++;
+            }
+            const done = i + 1 - skip;
+            const percent = Math.floor((done * 100) / total);
+            if (percent >= (this.shownWrite ?? 0) + 5 || done === total) {
                 this.shownWrite = percent;
+                await this.progress(done, total);
                 await this.screen.line('percent', `${percent}%`);
             }
-            opts.onBlock?.(k + 1, todo.length);
+            opts.onBlock?.(done, total, written);
         }
         const after = await this.sectorCrcs(chip, offset, count);
         const bad = [];
