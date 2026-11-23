@@ -45,6 +45,8 @@ export function createFlasher(deps) {
         fromRelease: false,
         saved: {codeplug: null, [CHIP_PROGRAM]: null, [CHIP_DATA]: null}, // backup file names made this session
         stock: {[CHIP_PROGRAM]: null, [CHIP_DATA]: null},                 // back to stock: {name, data}
+        finished: {update: false, install: false, stock: false}, // the task's last step went through (green, and
+                                                                 // still there to do again)
         log: [],             // {time, text, kind}
         logBox: null,
         logOpen: false,
@@ -232,6 +234,7 @@ export function createFlasher(deps) {
             const seconds = Math.round((Date.now() - started) / 1000);
             say(`${t('flUpdateDone')} (${written} × 4 KB)`, 1, 1);
             logLine(`${t('flUpdateDone')}: ${written} × 4 KB · ${updater.s.baud} baud · ${seconds} s`, 'ok');
+            state.finished.update = `${t('flUpdateDone')} ${clock()} · ${written} × 4 KB`;
             screenNote(updater.screen);
             toast(t('flUpdateDone'), 6000);
         } catch (e) {
@@ -330,7 +333,7 @@ export function createFlasher(deps) {
         }
     }
 
-    const doWrite = busyGuard(async (portPromise, title, jobs) => {
+    const doWrite = busyGuard(async (portPromise, title, jobs, task) => {
         logLine(`—— ${title}: ${jobs.map((j) => j.name).join(', ')}`);
         jobs.forEach(checkJob);
         const boot = new Bootloader(await portPromise);
@@ -366,6 +369,7 @@ export function createFlasher(deps) {
             const seconds = Math.round((Date.now() - started) / 1000);
             say(t('flWriteDone'), 1, 1);
             logLine(`${t('flWriteDone')} · ${boot.s.baud} baud · ${seconds} s`, 'ok');
+            state.finished[task] = `${t('flWriteDone')} ${clock()}`;
             screenNote(boot.screen);
             toast(t('flWriteDone'), 6000);
         } catch (e) {
@@ -384,6 +388,7 @@ export function createFlasher(deps) {
             state.firmware = {name: 'opendmr.bin', size: release.files.firmware.length,
                 image: prepareImage(release.files.firmware)};
             state.fromRelease = true;
+            state.finished = {update: false, install: false, stock: false};
             logLine(`${t('flRelease')}: ${release.name} · opendmr.bin ${kb(state.firmware.size)}`, 'ok');
         } catch (e) {
             const text = (e instanceof ReleaseMissing) ? `${t('flReleaseMissing')}: ${e.message}` : e.message;
@@ -463,16 +468,18 @@ export function createFlasher(deps) {
         let panel;
         if (task === 'update') {
             panel = [stepList([{
-                title: t('flUpdate'),
-                sub: radio ? `${t('flRadioNow')}: OpenDMR ${radio.git || ''} · ${t('flUpdateSub')}` : t('flNeedsOpenDmr'),
+                title: t('flUpdate'), done: !!state.finished.update,
+                sub: state.finished.update || (radio ? `${t('flRadioNow')}: OpenDMR ${radio.git || ''} · ${t('flUpdateSub')}`
+                    : t('flNeedsOpenDmr')),
                 action: button(t('flUpdate'), 'upload', () => withPort((p) => doUpdate(p, false)),
                     {primary: true, disabled: !release || !state.firmware || !radio}),
             }])];
         } else if (task === 'install') {
             panel = [stepList([backupStep(CHIP_PROGRAM, true), backupStep(CHIP_DATA, true), {
-                title: t('flInstallStock'), done: false, sub: t('flInstallSub'),
+                title: t('flInstallStock'), done: !!state.finished.install, sub: state.finished.install || t('flInstallSub'),
                 action: button(t('flInstall'), 'upload', () => withPort((p) => doWrite(p, t('flInstallStock'),
-                    [{chip: CHIP_PROGRAM, image: true, name: state.firmware.name, data: state.firmware.image}])),
+                    [{chip: CHIP_PROGRAM, image: true, name: state.firmware.name, data: state.firmware.image}],
+                    'install')),
                 {primary: true, disabled: !release || !state.firmware}),
             }])];
         } else if (task === 'backup') {
@@ -496,8 +503,9 @@ export function createFlasher(deps) {
                 sub: data ? `${data.name} · ${kb(data.data.length)}` : t('flStockDataSub'),
                 action: button(t('flChoose'), 'open', chooseStockData),
             }, {
-                title: t('flWriteBack'), done: false, sub: t('flWriteBackSub'),
-                action: button(t('flWriteBack'), 'upload', () => withPort((p) => doWrite(p, t('flTaskStock'), jobs)),
+                title: t('flWriteBack'), done: !!state.finished.stock, sub: state.finished.stock || t('flWriteBackSub'),
+                action: button(t('flWriteBack'), 'upload', () => withPort((p) => doWrite(p, t('flTaskStock'), jobs,
+                    'stock')),
                     {primary: true, disabled: !release || !prog}),
             }])];
         }
