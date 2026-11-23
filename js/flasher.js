@@ -509,7 +509,8 @@ export function createFlasher(deps) {
                     ? `${release.name} · opendmr.bin ${kb(release.files.firmware.length)}` : t('flStepFolderSub')),
                 button(release ? t('flChange') : t('flPickRelease'), 'open', chooseFolder, {primary: !release})));
 
-        main.append(pageHead(t('flasher')),
+        // the steps scroll (the advanced fold opened, a small window); the log stays under them, always in sight
+        main.append(pageHead(t('flasher')), el('div', {class: 'fl-scroll'},
             el('div', {class: 'card form-card fl-card'},
                 status,
                 el('div', {class: 'fl-tasks', role: 'tablist'}, TASKS.map((k) => el('button',
@@ -521,7 +522,7 @@ export function createFlasher(deps) {
                 el('p', {class: 'muted fl-task-intro'}, t(TASK_TEXT[task] + 'Intro')),
                 ...panel,
                 live),
-            advanced, logPanel);
+            advanced), logPanel);
         state.logBox.scrollTop = state.logBox.scrollHeight;
     }
 
