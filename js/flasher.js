@@ -184,7 +184,7 @@ export function createFlasher(deps) {
 
     // The page's connected port (the toolbar's "Connect": one port for the whole page), lent to a step: the link's
     // reader stopped, the port given back when the step ends (and the page drawn again with what answers then)
-    function withPort(action) {
+    function withPort(action, task = null) {
         if (state.busy) {
             toast(t('flBusy'));
             return;
@@ -194,6 +194,9 @@ export function createFlasher(deps) {
             logLine(t('flConnectFirst'), 'bad');
             toast(t('flConnectFirst'), 6000);
             return;
+        }
+        if (task) {
+            state.finished[task] = false; // the last result goes as it is done again
         }
         const port = (async () => {
             await link.suspend();
@@ -471,7 +474,7 @@ export function createFlasher(deps) {
                 title: t('flUpdate'), done: !!state.finished.update,
                 sub: state.finished.update || (radio ? `${t('flRadioNow')}: OpenDMR ${radio.git || ''} · ${t('flUpdateSub')}`
                     : t('flNeedsOpenDmr')),
-                action: button(t('flUpdate'), 'upload', () => withPort((p) => doUpdate(p, false)),
+                action: button(t('flUpdate'), 'upload', () => withPort((p) => doUpdate(p, false), 'update'),
                     {primary: true, disabled: !release || !state.firmware || !radio}),
             }])];
         } else if (task === 'install') {
@@ -479,7 +482,7 @@ export function createFlasher(deps) {
                 title: t('flInstallStock'), done: !!state.finished.install, sub: state.finished.install || t('flInstallSub'),
                 action: button(t('flInstall'), 'upload', () => withPort((p) => doWrite(p, t('flInstallStock'),
                     [{chip: CHIP_PROGRAM, image: true, name: state.firmware.name, data: state.firmware.image}],
-                    'install')),
+                    'install'), 'install'),
                 {primary: true, disabled: !release || !state.firmware}),
             }])];
         } else if (task === 'backup') {
@@ -505,7 +508,7 @@ export function createFlasher(deps) {
             }, {
                 title: t('flWriteBack'), done: !!state.finished.stock, sub: state.finished.stock || t('flWriteBackSub'),
                 action: button(t('flWriteBack'), 'upload', () => withPort((p) => doWrite(p, t('flTaskStock'), jobs,
-                    'stock')),
+                    'stock'), 'stock'),
                     {primary: true, disabled: !release || !prog}),
             }])];
         }
@@ -519,7 +522,7 @@ export function createFlasher(deps) {
         const advanced = el('details', {class: 'fl-fold'},
             el('summary', {}, t('flAdvanced')),
             el('div', {class: 'id-sources'},
-                button(t('flInstallAll'), 'upload', () => withPort((p) => doUpdate(p, true)),
+                button(t('flInstallAll'), 'upload', () => withPort((p) => doUpdate(p, true), 'update'),
                     {disabled: !state.firmware || !radio}),
                 button(t('flUseOther'), 'open', chooseFirmware, {ghost: true})),
             el('p', {class: 'muted'}, state.firmware
