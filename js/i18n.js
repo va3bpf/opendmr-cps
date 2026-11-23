@@ -779,7 +779,7 @@ const TEXTS = {
         'La radio tiene OpenDMR: se escribe la versión nueva, solo lo que cambió, y la radio se reinicia.'],
     flTaskInstall: ['安装到原厂电台', 'Install on a stock radio', 'Instalar en una radio original'],
     flTaskInstallIntro: ['电台还是原厂固件：通过芯片的引导程序装上 OpenDMR。',
-        'The radio has the stock firmware: OpenDMR is installed through the chip's bootloader.',
+        'The radio has the stock firmware: OpenDMR is installed through the chip\'s bootloader.',
         'La radio tiene el firmware original: OpenDMR se instala por el bootloader del chip.'],
     flTaskBackup: ['备份这台电台', 'Back up this radio', 'Copiar esta radio'],
     flTaskBackupIntro: ['备份只能用在同一台电台上：里面有它的出厂校准。', 'A backup is only for the same radio: it holds its factory calibration.',
