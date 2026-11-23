@@ -420,19 +420,13 @@ export function createFlasher(deps) {
         const task = state.task ?? (radio ? 'update' : 'install');
         const busy = state.busy;
 
-        // a step: its mark (done, now, later), what it is, a line under it, its button
-        const stepList = (steps) => {
-            let current = false;
-            return el('ol', {class: 'fl-steps'}, steps.map((s) => {
-                const mark = s.done ? 'done' : (!current && !s.optional) ? (current = true, 'now') : 'later';
-                return el('li', {class: 'fl-step ' + mark},
+        // an item of the task (no order between them): done or not, what it is, a line under it, its button
+        const stepList = (steps) => el('ul', {class: 'fl-steps'}, steps.map((s) => el('li', {class: 'fl-step' + (s.done ? ' done' : '')},
                     el('span', {class: 'fl-mark'}, s.done ? '✓' : ''),
                     el('div', {class: 'fl-step-text'},
                         el('div', {class: 'fl-step-title'}, s.title),
                         s.sub ? el('div', {class: 'muted fl-step-sub'}, s.sub) : null),
-                    s.action ?? null);
-            }));
-        };
+                    s.action ?? null)));
         const button = (text, iconName, onclick, opts = {}) => el('button',
             {class: opts.primary ? 'primary' : (opts.ghost ? 'ghost' : ''), disabled: busy || !!opts.disabled, onclick},
             iconName ? icon(iconName) : null, text);

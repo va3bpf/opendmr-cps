@@ -508,16 +508,13 @@ button.more { margin: 6px 4px; width: calc(100% - 8px); justify-content: center;
 .fl-task:hover:not(:disabled) { color: var(--text); }
 .fl-task.active { background: var(--panel); color: var(--accent-text); box-shadow: var(--shadow); }
 .fl-task-intro { margin: 12px 0 4px; }
-.fl-steps { list-style: none; margin: 8px 0 0; padding: 0; counter-reset: fl-step; }
-.fl-step { counter-increment: fl-step; display: grid; grid-template-columns: 30px 1fr auto; gap: 12px; align-items: center;
+.fl-steps { list-style: none; margin: 8px 0 0; padding: 0; }
+.fl-step { display: grid; grid-template-columns: 30px 1fr auto; gap: 12px; align-items: center;
     padding: 12px 0; border-top: 1px solid var(--line); }
 .fl-step:first-child { border-top: 0; }
-.fl-mark { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 13px;
+.fl-mark { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 13px;
     font-weight: 700; border: 2px solid var(--line-strong); color: var(--muted); }
-.fl-mark:empty::before { content: counter(fl-step); }
-.fl-step.now .fl-mark { border-color: var(--accent); color: var(--accent); }
 .fl-step.done .fl-mark { border-color: var(--ok); background: var(--ok); color: #fff; }
-.fl-step.later .fl-step-title { color: var(--muted); }
 .fl-step-title { font-weight: 600; }
 .fl-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .fl-step-sub { font-size: 12.5px; margin-top: 2px; word-break: break-word; }
