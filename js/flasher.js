@@ -44,7 +44,6 @@ export function createFlasher(deps) {
         firmware: null,      // {name, size, image}: the release's opendmr.bin, or another file chosen
         fromRelease: false,
         saved: {codeplug: null, [CHIP_PROGRAM]: null, [CHIP_DATA]: null}, // backup file names made this session
-        skipBackups: false,  // install: "I have this radio's backups already"
         stock: {[CHIP_PROGRAM]: null, [CHIP_DATA]: null},                 // back to stock: {name, data}
         log: [],             // {time, text, kind}
         logBox: null,
@@ -470,20 +469,12 @@ export function createFlasher(deps) {
                     {primary: true, disabled: !release || !state.firmware || !radio}),
             }])];
         } else if (task === 'install') {
-            const backedUp = (state.saved[CHIP_PROGRAM] && state.saved[CHIP_DATA]) || state.skipBackups;
-            const skip = el('input', {type: 'checkbox', disabled: busy});
-            skip.checked = state.skipBackups;
-            skip.addEventListener('change', () => {
-                state.skipBackups = skip.checked;
-                rerender();
-            });
-            panel = [stepList([backupStep(CHIP_PROGRAM), backupStep(CHIP_DATA), {
-                title: t('flInstallStock'), done: false,
-                sub: backedUp ? t('flInstallSub') : t('flInstallLocked'),
+            panel = [stepList([backupStep(CHIP_PROGRAM, true), backupStep(CHIP_DATA, true), {
+                title: t('flInstallStock'), done: false, sub: t('flInstallSub'),
                 action: button(t('flInstall'), 'upload', () => withPort((p) => doWrite(p, t('flInstallStock'),
                     [{chip: CHIP_PROGRAM, image: true, name: state.firmware.name, data: state.firmware.image}])),
-                {primary: true, disabled: !release || !state.firmware || !backedUp}),
-            }]), el('label', {class: 'fl-skip'}, skip, ' ', t('flSkipBackups'))];
+                {primary: true, disabled: !release || !state.firmware}),
+            }])];
         } else if (task === 'backup') {
             panel = [stepList([{
                 title: t('flBackupCodeplug'),

@@ -520,7 +520,6 @@ button.more { margin: 6px 4px; width: calc(100% - 8px); justify-content: center;
 .fl-step.later .fl-step-title { color: var(--muted); }
 .fl-step-title { font-weight: 600; }
 .fl-step-sub { font-size: 12.5px; margin-top: 2px; word-break: break-word; }
-.fl-skip { display: flex; align-items: center; gap: 6px; margin: 4px 0 0 42px; font-size: 13px; color: var(--muted); }
 .fl-fold { max-width: 760px; margin-top: 12px; }
 .fl-fold > summary { cursor: pointer; color: var(--muted); font-weight: 600; padding: 6px 0; }
 .fl-fold .id-sources { margin: 6px 0; }
