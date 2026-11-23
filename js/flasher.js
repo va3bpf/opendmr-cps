@@ -16,8 +16,8 @@ import {crc32} from './codeplug/oddb.js';
 const PROGRAM_SIZE = 1 << 20;          // the GD25Q80
 const DATA_SIZE = 16 << 20;            // the 25Q128
 const FIRMWARE_BASE = 0xC000;          // where opendmr.bin starts in the program flash
-const TASKS = ['update', 'install', 'backup', 'stock'];
-const TASK_TEXT = {update: 'flTaskUpdate', install: 'flTaskInstall', backup: 'flTaskBackup', stock: 'flTaskStock'};
+const TASKS = ['update', 'install', 'backup'];
+const TASK_TEXT = {update: 'flTaskUpdate', install: 'flTaskInstall', backup: 'flTaskBackup'};
 
 function clock() {
     const now = new Date();
@@ -43,8 +43,7 @@ export function createFlasher(deps) {
         firmware: null,      // {name, size, image}: the release's opendmr.bin, or another file chosen
         fromRelease: false,
         saved: {[CHIP_PROGRAM]: null, [CHIP_DATA]: null}, // backup file names made this session
-        stock: {[CHIP_PROGRAM]: null, [CHIP_DATA]: null},                 // back to stock: {name, data}
-        finished: {update: false, install: false, stock: false}, // the task's last step went through (green, and
+        finished: {}, // update, install, write0 / write1 (a chip written back): what went through (green, and
                                                                  // still there to do again)
         log: [],             // {time, text, kind}
         logBox: null,
@@ -365,7 +364,7 @@ export function createFlasher(deps) {
             state.firmware = {name: 'opendmr.bin', size: release.files.firmware.length,
                 image: prepareImage(release.files.firmware)};
             state.fromRelease = true;
-            state.finished = {update: false, install: false, stock: false};
+            state.finished = {};
             logLine(`${t('flRelease')}: ${release.name} · opendmr.bin ${kb(state.firmware.size)}`, 'ok');
         } catch (e) {
             const text = (e instanceof ReleaseMissing) ? `${t('flReleaseMissing')}: ${e.message}` : e.message;
@@ -403,12 +402,13 @@ export function createFlasher(deps) {
             }
             rerender();
         });
-        const stockPicker = (chip) => filePicker('.bin,application/octet-stream', async (file) => {
-            state.stock[chip] = {name: file.name, data: new Uint8Array(await file.arrayBuffer())};
-            rerender();
+        // a backup file chosen goes back to its chip at once (the program flash one: back to the stock firmware)
+        const restorePicker = (chip) => filePicker('.bin,application/octet-stream', async (file) => {
+            const data = new Uint8Array(await file.arrayBuffer());
+            withPort((p) => doWrite(p, t('flWriteBack'), [{chip, name: file.name, data}], 'write' + chip),
+                'write' + chip);
         });
-        const chooseStockProgram = stockPicker(CHIP_PROGRAM);
-        const chooseStockData = stockPicker(CHIP_DATA);
+        const restore = {[CHIP_PROGRAM]: restorePicker(CHIP_PROGRAM), [CHIP_DATA]: restorePicker(CHIP_DATA)};
 
         const release = currentRelease();
         const link = getLink();
@@ -433,14 +433,20 @@ export function createFlasher(deps) {
             {class: opts.primary ? 'primary' : (opts.ghost ? 'ghost' : ''), disabled: busy || !!opts.disabled, onclick},
             iconName ? icon(iconName) : null, text);
 
-        const backupStep = (chip, optional = false) => ({
-            title: t(chip === CHIP_DATA ? 'flBackupData' : 'flBackupProgram'),
-            sub: state.saved[chip] ? `${t('flSaved')}: ${state.saved[chip]}`
-                : t(chip === CHIP_DATA ? 'flBackupDataSub' : 'flBackupProgramSub'),
-            done: !!state.saved[chip], optional,
-            action: button(t('flBackUp'), 'download', () => withPort((p) => doBackup(p, chip)),
-                {disabled: !release}),
-        });
+        // a chip's row: its backup, and a backup file written back
+        const chipRow = (chip) => {
+            const written = state.finished['write' + chip];
+            const saved = state.saved[chip];
+            return {
+                title: t(chip === CHIP_DATA ? 'flBackupData' : 'flBackupProgram'), optional: true,
+                done: !!(saved || written),
+                sub: written || (saved ? `${t('flSaved')}: ${saved}` : t(chip === CHIP_DATA ? 'flBackupDataSub'
+                    : 'flBackupProgramSub')),
+                action: el('div', {class: 'fl-actions'},
+                    button(t('flBackUp'), 'download', () => withPort((p) => doBackup(p, chip)), {disabled: !release}),
+                    button(t('flWriteBack'), 'upload', restore[chip], {disabled: !release})),
+            };
+        };
 
         let panel;
         if (task === 'update') {
@@ -452,33 +458,15 @@ export function createFlasher(deps) {
                     {primary: true, disabled: !release || !state.firmware || !radio}),
             }])];
         } else if (task === 'install') {
-            panel = [stepList([backupStep(CHIP_PROGRAM, true), backupStep(CHIP_DATA, true), {
+            panel = [stepList([{
                 title: t('flInstallStock'), done: !!state.finished.install, sub: state.finished.install || t('flInstallSub'),
                 action: button(t('flInstall'), 'upload', () => withPort((p) => doWrite(p, t('flInstallStock'),
                     [{chip: CHIP_PROGRAM, image: true, name: state.firmware.name, data: state.firmware.image}],
                     'install'), 'install'),
                 {primary: true, disabled: !release || !state.firmware}),
             }])];
-        } else if (task === 'backup') {
-            panel = [stepList([backupStep(CHIP_PROGRAM, true), backupStep(CHIP_DATA, true)])];
         } else {
-            const prog = state.stock[CHIP_PROGRAM];
-            const data = state.stock[CHIP_DATA];
-            const jobs = [prog && {chip: CHIP_PROGRAM, ...prog}, data && {chip: CHIP_DATA, ...data}].filter(Boolean);
-            panel = [stepList([{
-                title: t('flStockProgram'), done: !!prog,
-                sub: prog ? `${prog.name} · ${kb(prog.data.length)}` : t('flStockProgramSub'),
-                action: button(t('flChoose'), 'open', chooseStockProgram),
-            }, {
-                title: t('flStockData'), done: !!data, optional: true,
-                sub: data ? `${data.name} · ${kb(data.data.length)}` : t('flStockDataSub'),
-                action: button(t('flChoose'), 'open', chooseStockData),
-            }, {
-                title: t('flWriteBack'), done: !!state.finished.stock, sub: state.finished.stock || t('flWriteBackSub'),
-                action: button(t('flWriteBack'), 'upload', () => withPort((p) => doWrite(p, t('flTaskStock'), jobs,
-                    'stock'), 'stock'),
-                    {primary: true, disabled: !release || !prog}),
-            }])];
+            panel = [stepList([chipRow(CHIP_PROGRAM), chipRow(CHIP_DATA)])];
         }
 
         // what it is doing now (or did last), under the steps: only once there is something to say

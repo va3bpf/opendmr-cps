@@ -35,11 +35,11 @@ belong to the same release. One task at a time, each with its steps:
 - **Update OpenDMR**: writes the sectors that differ over the cable, without the PTT + SK1 upgrade mode, as OpenDMR's
   `tools/debug/fw_update.py`.
 - **Install on a stock radio**: through the chip bootloader (radio off, then on).
-- **Back up this radio**: the program flash (1 MB) and the data flash (16 MB, with the radio's factory calibration),
-  through the chip bootloader, each checked against the radio sector by sector once read. The codeplug itself is
-  backed up with "Read radio" and "Save file".
-- **Back to stock**: writes the radio's own backups back in one power cycle; a data flash backup only when its
-  factory calibration sector matches the radio's.
+- **Backup and restore**: the program flash (1 MB) and the data flash (16 MB, with the radio's factory calibration),
+  each backed up (checked against the radio sector by sector once read) or written back, through the chip
+  bootloader. Writing back the stock program flash backup goes back to the stock firmware; a data flash backup is only
+  written when its factory calibration sector matches the radio's. The codeplug itself is backed up with "Read radio"
+  and "Save file".
 
 Only the firmware area (0xC000 and up) of the program flash is ever written; the bootloader below it stays. The radio's
 screen and the page's log show each step; the log can be saved to a file.

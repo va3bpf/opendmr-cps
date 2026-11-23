@@ -519,6 +519,7 @@ button.more { margin: 6px 4px; width: calc(100% - 8px); justify-content: center;
 .fl-step.done .fl-mark { border-color: var(--ok); background: var(--ok); color: #fff; }
 .fl-step.later .fl-step-title { color: var(--muted); }
 .fl-step-title { font-weight: 600; }
+.fl-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .fl-step-sub { font-size: 12.5px; margin-top: 2px; word-break: break-word; }
 .fl-fold { max-width: 760px; margin-top: 12px; }
 .fl-fold > summary { cursor: pointer; color: var(--muted); font-weight: 600; padding: 6px 0; }
