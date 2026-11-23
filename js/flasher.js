@@ -223,7 +223,7 @@ export function createFlasher(deps) {
             await updater.open();
             let lastStep = -1;
             const written = await updater.writeImage(firmware.image, (done, total) => {
-                say(`${t('flUpdating')} ${done} / ${total}`, done, total);
+                say(`${t('flUpdating')} ${done} / ${total} · ${updater.s.baud} baud`, done, total);
                 progress(done, total);
                 const step = Math.floor((done * 20) / total); // a line each 5 %
                 if (step !== lastStep) {
@@ -257,7 +257,7 @@ export function createFlasher(deps) {
         for (const r of L.REGIONS) {
             await link.readRegion(img, r.start, r.end, progress, done, total);
             done += r.end - r.start;
-            say(`${t('reading')} ${Math.round((100 * done) / total)} %`, done, total);
+            say(`${t('reading')} ${Math.round((100 * done) / total)} % · ${link.baud} baud`, done, total);
         }
         const name = `dm32-codeplug-${stamp()}.bin`;
         download(name, img);
@@ -278,7 +278,7 @@ export function createFlasher(deps) {
             logLine(t('flSwitchOffOn'));
             let lastStep = -1;
             const result = await boot.dump(chip, (done, total) => {
-                say(`${t('flReading')} ${done} / ${total}`, done, total);
+                say(`${t('flReading')} ${done} / ${total} · ${boot.s.baud} baud`, done, total);
                 progress(done, total);
                 const step = Math.floor((done * 20) / total);
                 if (step !== lastStep) {
@@ -355,7 +355,7 @@ export function createFlasher(deps) {
                 const written = await boot.restore(job.chip, job.data, {
                     offset,
                     onBlock: (done, total) => {
-                        say(`${job.name}: ${t('flWriting')} ${done} / ${total}`, done, total);
+                        say(`${job.name}: ${t('flWriting')} ${done} / ${total} · ${boot.s.baud} baud`, done, total);
                         progress(done, total);
                         const step = Math.floor((done * 20) / total);
                         if (step !== lastStep) {
