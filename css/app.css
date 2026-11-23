@@ -379,6 +379,11 @@ dl.info dd { margin: 0; font-variant-numeric: tabular-nums; }
 
 /* ---- satellites ---- */
 table.grid td.warn { color: #c2410c; }
+.toolbar-speed { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.toolbar-speed label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.toolbar-input { font: inherit; width: 96px; height: 34px; padding: 0 8px; border: 1px solid var(--line-strong);
+    border-radius: 8px; background: var(--panel); color: var(--text); }
+.toolbar-input:disabled { opacity: .5; }
 .toolbar-select { font: inherit; height: 34px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 8px;
     background: var(--panel); color: var(--text); }
 textarea { font: 12px/1.4 ui-monospace, Consolas, monospace; width: 100%; padding: 8px; border: 1px solid var(--line-strong);

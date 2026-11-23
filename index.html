@@ -20,6 +20,10 @@
         <button id="btnCsvExport" class="ghost" data-icon="save" title="Channels.csv, Zones.csv, Contacts.csv, TG_Lists.csv, APRS.csv (zip)"><span data-i18n="csvExportButton">Export CSV</span></button>
     </div>
     <div class="group">
+        <span id="speedBox" class="toolbar-speed">
+            <label><input type="checkbox" id="chkSpeedAuto"> <span data-i18n="speedAuto">Auto speed</span></label>
+            <input type="number" id="inpSpeed" class="toolbar-input" step="1" value="115200"> baud
+        </span>
         <button id="btnConnect" data-icon="plug"><span data-i18n="connect">Connect</span></button>
         <button id="btnRead" data-icon="download" disabled><span data-i18n="readRadio">Read radio</span></button>
         <button id="btnWrite" class="primary" data-icon="upload" disabled><span data-i18n="writeRadio">Write radio</span></button>

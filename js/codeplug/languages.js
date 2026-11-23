@@ -19,7 +19,7 @@ const DIRECTORY_MAGIC = 'DM32FDIR';
 const SPEC = /%[-+ #0-9.*]*[a-zA-Z%]/g; // the format specifiers of a string
 const enc = new TextEncoder();
 
-// The languages the release's languages folder brings, ticked unless the user unticks them
+// The languages the chosen folder brings (opendmr-languages), ticked unless the user unticks them
 export const DEFAULT_TICKED = ['zh', 'es'];
 export const NAMES = {en: 'English', zh: '中文', es: 'Español'};
 

@@ -22,6 +22,16 @@ export const NXDN_RAN_MAX = 63;
 export const M17_CAN_MAX = 15; // M17's channel access number, byte 44 (codeplug.h codeplug_m17_can())
 // The radio's NXDN ID (OpenDMR services/nxdn_id.c, a custom data block "DT" 6): version 1, 0, the ID little endian;
 // 0 or no block: the DMR ID
+// store(): a new custom data block needed, but the area's chain of blocks is broken at `at` (#124)
+export class CustomDataDamaged extends Error {
+    constructor(at) {
+        super(`the custom data is damaged at 0x${(at - L.CUSTOM_DATA).toString(16)}: no room for new blocks`);
+        this.at = at;
+    }
+}
+
+const CUSTOM_EMPTY = 0xFFFFFFFF;   // a free place (type and length), the chain's end
+const CUSTOM_RETIRED = 0x4454FFFF; // a block replaced by one of another length: kept as space, read by nobody
 export const NXDN_ID_BLOCK_TYPE = 0x44540006;
 const NXDN_ID_BLOCK_LENGTH = 4;
 // The radio's interface language (OpenDMR services/language.c): its code in the custom data block "DT" 8 (version 1,
@@ -525,6 +535,36 @@ export class Codeplug {
         return null;
     }
 
+    // Where the custom data's chain of blocks breaks: the header of a block of length 0 (a zero filled area: the CPS
+    // and the firmware's custom_data.c can't add a block after it), or one running past the area; -1: a sound chain (or
+    // no "OpenGD77" header: started afresh when written). #124
+    customDataDamage() {
+        const img = this.img;
+        if (new TextDecoder().decode(img.subarray(L.CUSTOM_DATA, L.CUSTOM_DATA + 8)) !== 'OpenGD77') {
+            return -1;
+        }
+        let at = L.CUSTOM_DATA + 12;
+        for (; at + 8 <= L.CUSTOM_DATA_END;) {
+            const t = u32(img, at);
+            const length = u32(img, at + 4);
+            if (t === CUSTOM_EMPTY && length === CUSTOM_EMPTY) {
+                return -1;
+            }
+            if (length === 0 || length === CUSTOM_EMPTY || (at + 8 + length > L.CUSTOM_DATA_END)) {
+                return at;
+            }
+            at += 8 + length;
+        }
+        return (at < L.CUSTOM_DATA_END) ? at : -1; // a few bytes left at the end: full, not broken
+    }
+
+    // The broken part cleared (0xFF from that header to the end): the blocks before it kept; the firmware sees none
+    // after it either
+    repairCustomData(at) {
+        fill(this.img, at, L.CUSTOM_DATA_END - at, 0xFF);
+        this.customRepair = [at, L.CUSTOM_DATA_END];
+    }
+
     // A custom data block written: the same block, or a new one in the first free place (custom_data.c)
     storeCustomBlock(type, bytes, what) {
         const img = this.img;
@@ -535,16 +575,23 @@ export class Codeplug {
             fill(img, L.CUSTOM_DATA + 12, 8, 0xFF);
             this.customRanges.push([L.CUSTOM_DATA, L.CUSTOM_DATA + 12]);
         }
-        const block = this.findCustomBlock(type) ?? this.findCustomBlock(0xFFFFFFFF);
-        if (!block) {
-            throw new Error(`no room for the ${what} in the custom data`);
+        let block = this.findCustomBlock(type);
+        if (block && block.length !== bytes.length) {
+            // another length (another version's block): retired in place, so the blocks after it stay where they are
+            // (resized there, it ran over them); the new one goes into the first free place
+            setU32(img, block.at, CUSTOM_RETIRED);
+            this.customRanges.push([block.at, block.at + 4]);
+            block = null;
         }
-        if (block.length !== bytes.length) { // a new block in the first free place
-            if (block.data + bytes.length >= L.CUSTOM_DATA_END) {
+        if (!block) {
+            block = this.findCustomBlock(CUSTOM_EMPTY);
+            if (!block || (block.data + bytes.length + 8 > L.CUSTOM_DATA_END)) {
                 throw new Error(`no room for the ${what} in the custom data`);
             }
             setU32(img, block.at, type);
             setU32(img, block.at + 4, bytes.length);
+            fill(img, block.data + bytes.length, 8, 0xFF); // the next free place: the chain's end
+            this.customRanges.push([block.data + bytes.length, block.data + bytes.length + 8]);
         }
         img.set(bytes, block.data);
         this.customRanges.push([block.at, block.data + bytes.length]);
@@ -562,10 +609,39 @@ export class Codeplug {
         this.storeCustomBlock(LOCKOUT_BLOCK_TYPE, bytes, 'scan lockouts');
     }
 
-    // The records back into the image
+    // The custom data blocks store() is about to write: {type, length} (the same conditions as there)
+    pendingCustomBlocks() {
+        const out = [];
+        if (this.satellitesDirty) {
+            out.push({type: SAT.BLOCK_TYPE, length: SAT.BLOCK_LENGTH});
+        }
+        if (this.lockoutsDirty) {
+            out.push({type: LOCKOUT_BLOCK_TYPE, length: LOCKOUT_BLOCK_LENGTH});
+        }
+        if (this.themesDirty && (this.hadThemeBlock || !TH.isDefault(this.themes))) {
+            out.push({type: TH.THEME_BLOCK_TYPE, length: TH.THEME_BLOCK_LENGTH});
+        }
+        if (this.bootImageDirty && (this.bootImage || this.hadBootImageBlock)) {
+            out.push({type: BOOT.BOOT_IMAGE_BLOCK_TYPE, length: this.bootImage?.length ?? BOOT.BOOT_IMAGE_BLOCK_LENGTH});
+        }
+        if (this.general.nxdnId !== this.nxdnIdRead) {
+            out.push({type: NXDN_ID_BLOCK_TYPE, length: NXDN_ID_BLOCK_LENGTH});
+        }
+        if (this.settings.languageDirty || this.settings.language !== this.languageRead) {
+            out.push({type: LANGUAGE_BLOCK_TYPE, length: LANGUAGE_BLOCK_LENGTH});
+        }
+        return out;
+    }
+
+    // The records back into the image. CustomDataDamaged (nothing changed yet) when a block needs a new place and the
+    // custom data's chain is broken: repairCustomData() with the user's consent, then store() again
     store() {
         const img = this.img;
-        this.customRanges = [];
+        const bad = this.customRepair ? -1 : this.customDataDamage();
+        if (bad >= 0 && this.pendingCustomBlocks().some(({type, length}) => this.findCustomBlock(type)?.length !== length)) {
+            throw new CustomDataDamaged(bad);
+        }
+        this.customRanges = this.customRepair ? [this.customRepair] : [];
         if (this.satellitesDirty) {
             this.storeSatellites();
         }

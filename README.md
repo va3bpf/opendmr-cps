@@ -3,7 +3,7 @@
 [English](README.en.md) · 浏览器里的写频软件，用于运行 [OpenDMR](https://github.com/va3bpf/OpenDMR) 固件的
 **Baofeng DM-32 / DM-32UV**。
 
-当前版本 **0.11.0**（[版本记录](CHANGELOG.md)）
+当前版本 **0.12.0**（[版本记录](CHANGELOG.md)）
 
 ## 功能
 

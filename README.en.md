@@ -3,7 +3,7 @@
 [中文](README.md) · A codeplug editor in the browser for the **Baofeng DM-32 / DM-32UV** running the
 [OpenDMR](https://github.com/va3bpf/OpenDMR) firmware.
 
-Current version **0.11.0** ([changelog](CHANGELOG.md)).
+Current version **0.12.0** ([changelog](CHANGELOG.md)).
 
 ## Features
 

@@ -26,6 +26,22 @@ const UART_CLOCK = 84000000 / 16;      // the radio's UART: baud = UART_CLOCK / 
 const SPEED_DIVISORS = [7, 14, 21];    // 750000, 375000, 250000 baud (12 MHz / n for a CH340 too)
 const SPEED_BACK_MS = 500;             // an unconfirmed speed: the radio is back at 115200 after 0.4 s
 const QUIET_BACK_MS = 5500;            // and after 5 s without a request
+const REQUEST_LOST_MS = 300;           // a request cut short: the radio drops it after 0.2 s of quiet (OpenDMR 0.8.2)
+const MIN_DIVISOR = 4;                // the radio's fastest: 1312500 baud
+const MAX_DIVISOR = 46;               // its slowest: 115200 (UART_CLOCK / 46)
+export const SPEED_MIN = BAUD;
+export const SPEED_MAX = Math.floor(UART_CLOCK / MIN_DIVISOR);
+
+// A speed the user typed: the radio's nearest one (UART_CLOCK / divisor; 115200 for the slowest), or null when the
+// radio can't run near it
+export function radioBaud(baud) {
+    const divisor = Math.round(UART_CLOCK / Number(baud));
+    if (!Number.isFinite(divisor) || divisor < MIN_DIVISOR || divisor > MAX_DIVISOR) {
+        return null;
+    }
+    return (divisor === MAX_DIVISOR) ? BAUD : Math.floor(UART_CLOCK / divisor);
+}
+export const SPEED_SETTING_KEY = 'opendmr-cable-speed';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const AREA_FLASH = 1;
 const AREA_RADIO_INFO = 9;
@@ -34,6 +50,10 @@ const RAW_SECTOR = 0x800000;
 const RAW_CRC = 0x80000000;
 
 export class RadioLink {
+    // the page's texts (app.js sets i18n's t): the messages this class makes
+    static text = (key) => ({speedNotKept: 'The radio did not keep {baud} baud on this cable'})[key] ?? key;
+    static speed = 'auto'; // the cable's speed: 'auto' or a baud rate from radioBaud (app.js, the toolbar)
+
     constructor() {
         this.port = null;
         this.reader = null;
@@ -292,10 +312,12 @@ export class RadioLink {
     }
 
     // A failed write or CRC mismatch invalidates the whole sector transaction.
-    // Start it again at a lower speed, including a fresh prepare and read-back CRC.
+    // Start it again at a lower speed (auto; a speed chosen by the user: the same one, three times at most), including
+    // a fresh prepare and read-back CRC.
     async writeVerifiedSector(sector, data, onSpeedChange, raw = false) {
         const address = sector * SECTOR;
         const expected = crc32(data);
+        let failures = 0;
         for (;;) {
             const previous = this.baud;
             try {
@@ -306,8 +328,14 @@ export class RadioLink {
                 }
                 return;
             } catch (e) {
-                if (previous <= BAUD || !this.connected) {
+                const fixed = this.fixedSpeed() !== null;
+                failures += 1;
+                if (previous <= BAUD || !this.connected || (fixed && failures >= 3)) {
                     throw new Error(`sector 0x${address.toString(16)}: ${e.message}`, {cause: e});
+                }
+                await sleep(REQUEST_LOST_MS); // a request cut short on the cable: the radio drops it (OpenDMR 0.8.2)
+                if (fixed) {
+                    continue;
                 }
                 await this.speedDown();
                 const baud = await this.speedUp(raw ? 0 : address, false, previous);
@@ -343,10 +371,30 @@ export class RadioLink {
         return null;
     }
 
-    // The fastest speed both ends keep ('D' 'S', confirmed by 'D' 'Y' and four CRCs of probe); 115200 when none.
+    // The cable's speed the user chose (the toolbar sets RadioLink.speed): null for auto, else that baud rate for every
+    // transfer
+    fixedSpeed() {
+        return (RadioLink.speed === 'auto') ? null : radioBaud(RadioLink.speed);
+    }
+
+    // auto: the fastest speed both ends keep ('D' 'S', confirmed by 'D' 'Y' and four CRCs of probe); 115200 when none.
     // reads: the sector at probe read too and checked with its CRC (a CH340 loses bytes to the PC at 375000 and up,
-    // while short replies and writes to the radio still pass)
+    // while short replies and writes to the radio still pass). A speed chosen by the user: that one, or an error.
     async speedUp(probe, reads = false, below = Infinity) {
+        const fixed = this.fixedSpeed();
+        if (fixed !== null) {
+            if (this.baud === fixed) {
+                return fixed;
+            }
+            await this.speedDown();
+            if (fixed === BAUD) {
+                return BAUD;
+            }
+            if ((await this.trySpeed(Math.round(UART_CLOCK / fixed), probe, reads)) !== true) {
+                throw new Error(RadioLink.text('speedNotKept').replaceAll('{baud}', fixed));
+            }
+            return this.baud;
+        }
         // the speed this kind of cable kept last time (its USB ids): the faster ones that failed not tried again
         const key = this.cableKey(reads);
         let known = null;
@@ -356,55 +404,67 @@ export class RadioLink {
             known = null;
         }
         for (const divisor of SPEED_DIVISORS.filter((d) => (UART_CLOCK / d < below) && ((known === null) || (d >= known)))) {
-            const baud = Math.floor(UART_CLOCK / divisor);
-            try {
-                await this.send([0x44, 0x53, divisor >> 8, divisor & 0xFF]);
-                const r = await this.receive(3, true, 500);
-                if (r[0] !== 0x44 || r[1] !== 0x53 || r[2] !== 1) {
-                    return BAUD;
-                }
-            } catch (e) {
+            const result = await this.trySpeed(divisor, probe, reads);
+            if (result === 'old') {
                 return BAUD; // a firmware without it
             }
-            await sleep(20);
-            await this.reopen(baud);
-            await sleep(50);
-            let ok = false;
-            try {
-                await this.send([0x44, 0x59]);
-                const r = await this.receive(2, true, 300);
-                ok = (r[0] === 0x44 && r[1] === 0x59);
-            } catch (e) {
-                ok = false;
-            }
-            const confirmed = ok;
-            for (let i = 0; ok && i < 4; i++) {
-                ok = (await this.sectorCrc(probe, 1)) !== null;
-            }
-            if (ok && reads) {
-                ok = await this.readsWell(probe);
-            }
-            if (ok) {
+            if (result) {
                 try {
                     localStorage.setItem(key, String(divisor));
                 } catch (e) {
                     // not kept: tried again next time
                 }
-                return baud;
-            }
-            if (confirmed) {
-                await this.speedDown(); // it keeps a confirmed speed: asked back
-            } else {
-                await this.reopen(BAUD); // the radio goes back by itself: after 0.4 s (a firmware before: 2 s)
-                for (const wait of [SPEED_BACK_MS, 2000]) {
-                    await sleep(wait);
-                    if ((await this.sectorCrc(probe, 1)) !== null) {
-                        break;
-                    }
-                }
+                return this.baud;
             }
         }
         return BAUD;
+    }
+
+    // One speed: asked, confirmed, checked. true: kept; false: back at 115200; 'old': the radio doesn't change speed
+    async trySpeed(divisor, probe, reads) {
+        const baud = Math.floor(UART_CLOCK / divisor);
+        try {
+            await this.send([0x44, 0x53, divisor >> 8, divisor & 0xFF]);
+            const r = await this.receive(3, true, 500);
+            if (r[0] !== 0x44 || r[1] !== 0x53 || r[2] !== 1) {
+                return 'old';
+            }
+        } catch (e) {
+            return 'old';
+        }
+        await sleep(20);
+        await this.reopen(baud);
+        await sleep(50);
+        let ok = false;
+        try {
+            await this.send([0x44, 0x59]);
+            const r = await this.receive(2, true, 300);
+            ok = (r[0] === 0x44 && r[1] === 0x59);
+        } catch (e) {
+            ok = false;
+        }
+        const confirmed = ok;
+        for (let i = 0; ok && i < 4; i++) {
+            ok = (await this.sectorCrc(probe, 1)) !== null;
+        }
+        if (ok && reads) {
+            ok = await this.readsWell(probe);
+        }
+        if (ok) {
+            return true;
+        }
+        if (confirmed) {
+            await this.speedDown(); // it keeps a confirmed speed: asked back
+        } else {
+            await this.reopen(BAUD); // the radio goes back by itself: after 0.4 s (a firmware before: 2 s)
+            for (const wait of [SPEED_BACK_MS, 2000]) {
+                await sleep(wait);
+                if ((await this.sectorCrc(probe, 1)) !== null) {
+                    break;
+                }
+            }
+        }
+        return false;
     }
 
     // The kind of cable (USB vendor and product), and whether reads were checked: the key of its kept speed

@@ -3,10 +3,10 @@
 import {t, applyTexts, toggleLanguage} from './i18n.js';
 import {icon, applyIcons} from './icons.js';
 import {Codeplug, MODES, P25_NAC_ANY, NXDN_RAN_MAX, M17_CAN_MAX, CALL_TYPES, POWER_LEVELS, STEPS_HZ, toneChoices, frequencyValid, LOCKOUTS_MAX,
-    TA_TX, APRS_CONFIGS_MAX, newAprsConfig} from './codeplug/codeplug.js';
+    TA_TX, APRS_CONFIGS_MAX, newAprsConfig, CustomDataDamaged} from './codeplug/codeplug.js';
 import {aprsSymbols} from './codeplug/aprs-symbols.js';
 import * as L from './codeplug/layout.js';
-import {RadioLink} from './radio/link.js';
+import {RadioLink, SPEED_MAX, SPEED_MIN, SPEED_SETTING_KEY, radioBaud} from './radio/link.js';
 import {GROUPS, SETTINGS, SETTINGS_SIZE} from './codeplug/settings.js';
 import {language} from './i18n.js';
 import {VERSION} from './version.js';
@@ -1528,7 +1528,7 @@ function viewRadioSettings(main) {
 
 /* ---- the radio's interface languages and fonts (OpenDMR docs/i18n.md) ---- */
 
-// The files the user chose (the languages folder of the OpenDMR zip: zh.json, es.json, cjk.bin, or single files). {languages: [{file, doc, errors, warnings, ticked}], fonts: [{file, bytes, name, error}]}
+// The files the user chose (the languages folder of opendmr-languages: zh.json, es.json, cjk.bin ..., or single files). {languages: [{file, doc, errors, warnings, ticked}], fonts: [{file, bytes, name, error}]}
 let langSet = null;
 let radioLangs = null; // what the radio has: {slots: [header or null] x 8, fonts: [directory entries]}; null: not read
 let langBusy = false;
@@ -1763,7 +1763,7 @@ async function deleteFromRadio(kind, what) {
 
 function viewLanguages(main) {
     if (!langSet) {
-        langSet = loadLangFiles({}); // the user chooses the languages folder of the OpenDMR zip
+        langSet = loadLangFiles({}); // the user chooses the languages folder of opendmr-languages
     }
     if (link?.connected && !radioLangs && !langBusy) {
         refreshRadioLangs();
@@ -2863,6 +2863,43 @@ function viewThemes(main) {
         drawWarnings();
     }
 
+    // A theme to share (#117): a JSON file of its name, kind and colours
+    function exportTheme(c) {
+        const name = themeName(c.pick);
+        const blob = new Blob([TH.themeToJson(name, c.dark, c.colours)], {type: 'application/json'});
+        const a = el('a', {href: URL.createObjectURL(blob),
+            download: (name.replace(/[\\/:*?"<>|]+/g, '_').trim() || 'theme') + '.opendmr-theme.json'});
+        a.click();
+        URL.revokeObjectURL(a.href);
+    }
+
+    // Shared themes' files: each one of my themes (while there is room)
+    async function importThemes(files) {
+        const added = [];
+        const bad = [];
+        for (const f of files) {
+            try {
+                const theme = TH.themeFromJson(await f.text());
+                const id = TH.freeUserId(th);
+                if (id === null) {
+                    bad.push(`${f.name}: ${t('themesFull')}`);
+                    continue;
+                }
+                const name = theme.name || TH.fitName(f.name.replace(/(\.opendmr-theme)?\.json$/i, ''));
+                th.user.push({id, name, dark: theme.dark, colours: theme.colours});
+                added.push(id);
+            } catch (e) {
+                bad.push(`${f.name}: ${e.message}`);
+            }
+        }
+        if (added.length) {
+            themePick = {user: added[added.length - 1]};
+            changed();
+            draw();
+        }
+        toast([t('themesImported').replace('{n}', added.length), ...bad].join('\n'), bad.length ? 10000 : 4000);
+    }
+
     function drawScreens() {
         screens.replaceChildren(...Object.keys(SCREENS).map((name) => el('button', {
             class: 'chip' + (name === themeScreen ? ' active' : ''),
@@ -2892,6 +2929,16 @@ function viewThemes(main) {
                 changed();
                 render();
             }, 'ghost'),
+            button(t('themesImport'), 'open', () => {
+                const input = el('input', {type: 'file', accept: '.json,application/json', multiple: true});
+                input.addEventListener('change', () => {
+                    if (input.files.length) {
+                        importThemes([...input.files]);
+                    }
+                });
+                input.click();
+            }, 'ghost'),
+            button(t('themeExport'), 'save', () => exportTheme(current()), 'ghost'),
             button(t('themeNew'), 'plus', () => addUser(null), 'primary')),
         el('p', {class: 'muted', style: 'margin:0 0 10px'}, t('themesIntro')),
         el('div', {class: 'work'},
@@ -2979,6 +3026,66 @@ async function connect() {
     }
 }
 
+// The cable's speed (toolbar): auto (the checkbox), the fastest the cable keeps for the long writes (DMR IDs,
+// languages, receive log); or the baud rate typed in the box, used for every transfer (codeplug read and write too).
+// Kept in the browser: SPEED_SETTING_KEY is 'auto' or the rate, SPEED_SETTING_KEY-fixed the rate typed last.
+function speedSelect() {
+    const auto = $('chkSpeedAuto');
+    const box = $('inpSpeed');
+    const load = (key) => {
+        try {
+            return localStorage.getItem(key);
+        } catch (e) {
+            return null; // Storage can be unavailable for a local HTML file
+        }
+    };
+    const now = load(SPEED_SETTING_KEY) || 'auto';
+    auto.checked = (now === 'auto') || (radioBaud(now) === null);
+    box.value = String(radioBaud(auto.checked ? load(`${SPEED_SETTING_KEY}-fixed`) : now) ?? SPEED_MIN);
+    box.min = String(SPEED_MIN);
+    box.max = String(SPEED_MAX);
+    let fixed = box.value; // the last good speed typed
+    const apply = (save) => {
+        fixed = box.value;
+        box.disabled = auto.checked;
+        RadioLink.speed = auto.checked ? 'auto' : Number(box.value);
+        if (!save) {
+            return;
+        }
+        try {
+            localStorage.setItem(SPEED_SETTING_KEY, String(RadioLink.speed));
+            localStorage.setItem(`${SPEED_SETTING_KEY}-fixed`, box.value);
+        } catch (e) {
+            toast(t('speedNotSaved'), 6000);
+        }
+    };
+    auto.addEventListener('change', () => apply(true));
+    box.addEventListener('change', () => {
+        const baud = radioBaud(box.value);
+        if (baud === null) {
+            toast(t('speedBad').replaceAll('{min}', SPEED_MIN).replaceAll('{max}', SPEED_MAX), 6000);
+            box.value = fixed;
+            return;
+        }
+        box.value = String(baud); // the radio's nearest speed (84 MHz / 16 / divisor)
+        apply(true);
+    });
+    apply(false);
+    speedTitle();
+}
+
+function speedTitle() {
+    $('speedBox').title = t('speedHelp');
+}
+
+// A speed chosen by the user: the link at it for a codeplug read or write (auto: those stay at 115200)
+async function fixedSpeedUp() {
+    const fixed = link.fixedSpeed();
+    if (fixed !== null && fixed !== link.baud) {
+        await link.speedUp(0);
+    }
+}
+
 async function readImage() {
     const img = new Uint8Array(L.IMAGE_SIZE).fill(0xFF);
     const total = L.REGIONS.reduce((n, r) => n + (r.end - r.start), 0);
@@ -3013,7 +3120,9 @@ async function readRadio() {
     status(t('reading'));
     try {
         await link.saveSettings();
+        await fixedSpeedUp();
         const img = await readImage(); // packed: about a second, no speed change needed
+        await link.speedDown();
         await link.closeScreen();
         radioImage = Uint8Array.from(img);
         codeplug = new Codeplug(img);
@@ -3030,6 +3139,18 @@ async function readRadio() {
         status(t('error'));
     } finally {
         progress(0, 0);
+        await speedBack();
+    }
+}
+
+// The radio back at 115200 after a transfer (it would keep a confirmed speed until 5 s without a request)
+async function speedBack() {
+    try {
+        if (link?.connected) {
+            await link.speedDown();
+        }
+    } catch (e) {
+        // the port went away
     }
 }
 
@@ -3052,9 +3173,13 @@ async function writeRadio() {
                 return;
             }
         }
-        codeplug.store();
+        if (!storeCodeplug()) {
+            status('');
+            return;
+        }
         status(t('reading'));
         await link.saveSettings(); // the settings in the flash as the radio has them; nothing left to save at restart
+        await fixedSpeedUp();
         const onRadio = await radioNow();
         const target = Uint8Array.from(onRadio);
         const ranges = L.ownedRanges(codeplug.channelsPerZone);
@@ -3076,6 +3201,7 @@ async function writeRadio() {
         }
         radioImage = onRadio;
         if (sectors.length === 0) {
+            await link.speedDown();
             await link.closeScreen();
             status(t('nothingToWrite'));
             return;
@@ -3087,21 +3213,46 @@ async function writeRadio() {
             progress(i + 1, sectors.length);
         }
         radioImage = target; // what the radio has now
+        await link.speedDown();
         await link.restart();
         status(t('writeDone') + ` (${sectors.length} × 4 KB)`);
         toast(t('writeDone'));
     } catch (e) {
         toast(t('error') + ': ' + e.message, 6000);
         status(t('error'));
+        await speedBack();
     } finally {
         progress(0, 0);
+    }
+}
+
+// The records into the image. Only when a change needs a new custom data block and that area is broken (#124: data
+// where a free place should be) the user is asked to clear the broken part; once written, the radio's area is sound
+// and nobody is asked again. false: they said no (nothing done)
+function storeCodeplug() {
+    try {
+        codeplug.store();
+        return true;
+    } catch (e) {
+        if (!(e instanceof CustomDataDamaged)) {
+            throw e;
+        }
+        if (!window.confirm(t('customDamagedAsk').replace('{at}', '0x' + (e.at - L.CUSTOM_DATA).toString(16).toUpperCase()))) {
+            toast(t('customDamagedNo'), 8000);
+            return false;
+        }
+        codeplug.repairCustomData(e.at);
+        codeplug.store();
+        return true;
     }
 }
 
 /* ---- files ---- */
 
 function saveFile() {
-    codeplug.store();
+    if (!storeCodeplug()) {
+        return;
+    }
     const head = new TextEncoder().encode(FILE_MAGIC);
     const blob = new Blob([head, codeplug.img], {type: 'application/octet-stream'});
     const a = el('a', {href: URL.createObjectURL(blob), download: (codeplug.general.callsign || 'codeplug') + '.opendmr'});
@@ -3124,7 +3275,9 @@ async function openFile(file) {
 /* ---- CSV (the OpenGD77 CPS's files) ---- */
 
 function exportCsv() {
-    codeplug.store();
+    if (!storeCodeplug()) {
+        return;
+    }
     const enc = new TextEncoder();
     const blob = makeZip(CSV.exportCsv(codeplug).map((f) => ({name: f.name, data: enc.encode(f.text)})));
     const a = el('a', {href: URL.createObjectURL(blob), download: (codeplug.general.callsign || 'codeplug') + '-csv.zip'});
@@ -3206,6 +3359,8 @@ function init() {
         render();
     }));
     $('btnConnect').addEventListener('click', connect);
+    RadioLink.text = t;
+    speedSelect();
     $('btnRead').addEventListener('click', readRadio);
     $('btnWrite').addEventListener('click', writeRadio);
     $('btnSave').addEventListener('click', saveFile);
@@ -3232,6 +3387,7 @@ function init() {
     $('btnLang').addEventListener('click', () => {
         toggleLanguage();
         applyTexts();
+        speedTitle();
         render();
     });
     render();

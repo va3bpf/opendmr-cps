@@ -175,6 +175,39 @@ export function builtinColours(t, id) {
     return t.builtin[id].colours ?? BUILTIN[id].colours;
 }
 
+// A theme as a file to share (#117): JSON, the colours by role (theme.h's order in ROLES), "#RRGGBB"
+//   {"format": "opendmr-theme", "version": 1, "name": "Night", "dark": true, "colours": {"background": "#07131F", ...}}
+export const THEME_FILE_FORMAT = 'opendmr-theme';
+
+export function themeToJson(name, dark, colours) {
+    const hex = (c) => '#' + c.toString(16).padStart(6, '0').toUpperCase();
+    return JSON.stringify({format: THEME_FILE_FORMAT, version: 1, name, dark: !!dark,
+        colours: Object.fromEntries(ROLES.map((r, i) => [r.key, hex(colours[i])]))}, null, 2) + '\n';
+}
+
+// A shared theme's file into {name, dark, colours}; an Error saying what is wrong. The colours by role, or a list of 16
+export function themeFromJson(text) {
+    let d;
+    try {
+        d = JSON.parse(text);
+    } catch (e) {
+        throw new Error('not JSON');
+    }
+    if (!d || d.format !== THEME_FILE_FORMAT) {
+        throw new Error(`not an ${THEME_FILE_FORMAT} file`);
+    }
+    const list = Array.isArray(d.colours) ? d.colours : ROLES.map((r) => d.colours?.[r.key]);
+    const colours = ROLES.map((r, i) => {
+        const m = /^#?([0-9a-f]{6})$/i.exec(String(list[i] ?? '').trim());
+        return m ? parseInt(m[1], 16) : null;
+    });
+    const missing = ROLES.filter((r, i) => colours[i] === null).map((r) => r.key);
+    if (missing.length) {
+        throw new Error('colours missing or wrong: ' + missing.join(', '));
+    }
+    return {name: fitName(String(d.name ?? '').trim()), dark: !!d.dark, colours};
+}
+
 // The first free id of a user's theme; null: all taken
 export function freeUserId(t) {
     for (let id = USER_ID; id < USER_ID + USER_THEMES_MAX; id++) {

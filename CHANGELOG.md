@@ -1,5 +1,37 @@
 # Changelog / 版本记录
 
+## 0.12.0 (2026-11-22)
+
+- Themes: Export theme saves the chosen theme (name, light or dark, colours) to a JSON file; Import themes adds such
+  files as your own themes, to share them
+  ([OpenDMR #117](https://github.com/va3bpf/OpenDMR/issues/117)).
+  主题：“导出主题”把选中的主题（名字、亮色或暗色、颜色）存成 JSON 文件；“导入主题”把这种文件加成自己的主题，方便分享
+  （[OpenDMR #117](https://github.com/va3bpf/OpenDMR/issues/117)）。
+- "No room for the themes in the custom data" with plenty of room: the radio's custom data area held invalid data
+  where a free place should be (zeros), and nothing could be added after it. Only when a change needs a new block
+  there, the CPS now asks whether to clear the invalid part (the valid blocks before it are kept); once written, it
+  doesn't ask again. A block of another length is no longer resized in place over the blocks after it
+  ([OpenDMR #124](https://github.com/va3bpf/OpenDMR/issues/124); also "no room for the NXDN ID", #16).
+  空间明明够却提示“no room for the themes in the custom data”：电台的自定义数据区里本该是空位的地方是无效数据（全 0），后面什么
+  都加不进去。现在只有在这次修改确实要新增数据块时，CPS 才会询问是否清除这部分无效数据（前面有效的块都保留）；写入一次以后就不
+  会再问。长度不同的同类数据块也不再原地改长度、覆盖后面的块（[OpenDMR #124](https://github.com/va3bpf/OpenDMR/issues/124)；
+  “no room for the NXDN ID” 也是这个原因，#16）。
+- Cable speed (toolbar, before Connect): “Auto speed” ticked as before (the fastest the cable keeps for the long writes, slower
+  when sectors fail), or, unticked, the speed typed in the box (115200 ... 1312500, the radio’s nearest) used for every read and write, the codeplug too; an
+  error says when the cable does not keep it. Kept in the browser. After a failed write the next try waits for the
+  radio to drop the request cut short ([OpenDMR #125](https://github.com/va3bpf/OpenDMR/issues/125)).
+  数据线速率（工具栏“连接电台”前面）：勾选“自动速率”（和以前一样，大量写入时用数据线能稳定工作的最快速率，扇区出错就降速），或者不勾选、在框里
+  填一个速率（115200 ~ 1312500，取电台最接近的速率），所有读写（包括码表）都用它；数据线不支持时会报错。设置保存在浏览器里。写入失败后先等电台丢掉被截断
+  的请求再重试（[OpenDMR #125](https://github.com/va3bpf/OpenDMR/issues/125)）。
+
+## 0.11.1 (2026-11-21)
+
+- Languages page: the languages and the Chinese font come from
+  [opendmr-languages](https://github.com/va3bpf/opendmr-languages) now (OpenDMR 0.8.1 no longer has a languages
+  folder in its zip): download it, choose its languages folder; the languages found are ticked.
+  语言页：语言和中文字库改从 [opendmr-languages](https://github.com/va3bpf/opendmr-languages) 下载（OpenDMR 0.8.1 的压缩包
+  里不再有 languages 文件夹）：下载后选它的 languages 文件夹，找到的语言默认勾选。
+
 ## 0.11.0 (2026-11-21)
 
 - Boot screen image (General page): choose a picture, it becomes the radio's 240 x 320 power-on screen in 16
