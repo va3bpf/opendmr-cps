@@ -201,7 +201,7 @@ button.icon-only { width: 30px; height: 30px; padding: 0; justify-content: cente
 .tab.active .badge { color: var(--c); background: color-mix(in srgb, var(--c) 16%, transparent); }
 
 main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 18px 20px; gap: 14px; overflow: hidden; }
-.page-head { display: flex; align-items: center; gap: 10px; flex: none; }
+.page-head { display: flex; align-items: center; gap: 10px; flex: none; min-height: 34px; } /* the height of its buttons and filter, with or without them: no jump between pages */
 .page-head h2 { margin: 0 8px 0 0; font-size: 18px; font-weight: 650; }
 .page-head .spacer { flex: 1; }
 
@@ -431,7 +431,7 @@ button.big { height: 40px; padding: 0 18px; font-weight: 600; }
 .warn-text { color: #b45309; white-space: pre-line; margin: 0 0 8px; }
 
 /* ---- satellites: one list to tick ---- */
-.sat-page { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; }
+.sat-page { display: flex; flex-direction: column; gap: 14px; flex: 1; min-height: 0; }
 .sat-intro { margin: 0; line-height: 1.7; }
 .sat-list { flex: 1; min-width: 0; overflow: auto; padding: 6px; }
 .sat-row { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 8px; cursor: pointer; }
