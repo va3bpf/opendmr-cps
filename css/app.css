@@ -111,6 +111,21 @@ button.icon-only { width: 30px; height: 30px; padding: 0; justify-content: cente
 .brand small { color: var(--muted); font-weight: 400; font-size: 12px; }
 .group { display: flex; gap: 6px; align-items: center; padding-left: 14px; border-left: 1px solid var(--line); }
 .group:first-of-type { border-left: none; }
+.topbar-row { display: contents; }
+
+/* Narrow screens: two rows, split at the group division */
+@media (max-width: 900px) {
+    .topbar { flex-direction: column; align-items: stretch; height: auto; padding: 8px 12px; gap: 0; }
+    .topbar-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .topbar-main { padding-bottom: 8px; }
+    .topbar-actions { padding-top: 8px; border-top: 1px solid var(--line); }
+    .topbar-row .brand { margin-right: auto; min-width: 0; }
+    .topbar-row .group { padding-left: 0; border-left: 0; flex-wrap: wrap; }
+    .topbar-actions .group:nth-child(1) { flex: 1 1 auto; }
+    .topbar-actions .group:nth-child(2) { flex: 0 0 auto; }
+    .statusbar { height: auto; min-height: 34px; flex-wrap: wrap; padding: 6px 12px; gap: 6px 10px; }
+    .statusbar #radioInfo { margin-left: 0; }
+}
 
 /* ---- status line ---- */
 .statusbar {

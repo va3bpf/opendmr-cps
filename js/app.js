@@ -3559,6 +3559,7 @@ function init() {
     document.querySelector('.side-foot').textContent = 'OpenDMR CPS · v' + VERSION;
     applyIcons();
     applyTexts();
+
     document.querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => {
         tab = b.dataset.tab;
         render();

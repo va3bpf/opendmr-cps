@@ -1,5 +1,12 @@
 # Changelog / 版本记录
 
+## Unreleased
+
+- Toolbar: below 900 px it no longer overflows: the buttons split into two rows at the group division, always visible.
+  Row 1: brand + New / Open / Save / CSV. Row 2: cable speed + Connect / Read / Write and the language.
+  工具栏：900 px 以下不再横向溢出：按钮按分组分成两行，始终可见。第一行：品牌 + 新建 / 打开 / 保存 / CSV；
+  第二行：写频线速度 + 连接 / 读取 / 写入和语言。
+
 ## 0.13.0 (2026-11-24)
 
 - Messages page (needs OpenDMR 0.9.0): the radio's 16 quick texts edited (inserted with # while writing a message,
