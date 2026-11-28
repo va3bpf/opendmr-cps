@@ -57,4 +57,4 @@
 - `py release.py`：生成发行用的 `opendmr-cps.html`（代码合成一个文件，压缩到最小）。改完源码后运行。
   需要先安装：`py -m pip install rjsmin rcssmin minify-html zopfli`
 - `py build.py`：生成可读的 `opendmr-cps-debug.html`，用于调试从磁盘直接打开的情况
-- 测试（不用电台，Node 18+）：`node tools/web/tests/test-updater.mjs`、`test-bootloader.mjs`、`test-screen.mjs`
+- 测试（不用电台，Node 18+）：`node tools/web/tests/test-updater.mjs`、`test-bootloader.mjs`、`test-screen.mjs`、`test-i18n.mjs`

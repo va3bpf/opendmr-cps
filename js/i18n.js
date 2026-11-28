@@ -1,4 +1,6 @@
-// Interface texts, 中文 / English / Español
+import {RU_TEXTS} from './i18n-ru.js';
+
+// Interface texts, 中文 / English / Español / Русский
 
 const TEXTS = {
     title: ['OpenDMR 写频', 'OpenDMR CPS', 'OpenDMR CPS'],
@@ -128,6 +130,7 @@ const TEXTS = {
     filter: ['筛选', 'Filter', 'Filtro'],
     count: ['数量', 'Count', 'Cantidad'],
     language: ['中文', 'English', 'Español'],
+    interfaceLanguage: ['界面语言', 'Interface language', 'Idioma de la interfaz'],
     vfo: ['VFO', 'VFO', 'VFO'],
     codeplug: ['码表', 'Codeplug', 'Codeplug'],
     radioSettings: ['电台设置', 'Radio settings', 'Ajustes de radio'],
@@ -878,7 +881,11 @@ const TEXTS = {
     flLogCopied: ['记录已复制', 'Log copied', 'Registro copiado'],
 };
 
-let lang = (localStorageGet('lang') ?? (navigator.language.startsWith('zh') ? 'zh' : (navigator.language.startsWith('es') ? 'es' : 'en')));
+const SUPPORTED_LANGUAGES = ['en', 'es', 'zh', 'ru'];
+const browserLanguage = navigator.language.startsWith('zh') ? 'zh' :
+    (navigator.language.startsWith('es') ? 'es' : (navigator.language.startsWith('ru') ? 'ru' : 'en'));
+const savedLanguage = localStorageGet('lang');
+let lang = SUPPORTED_LANGUAGES.includes(savedLanguage) ? savedLanguage : browserLanguage;
 
 function localStorageGet(key) {
     try {
@@ -893,6 +900,7 @@ export function t(key) {
     if (!pair) return key;
     if (lang === 'zh') return pair[0];
     if (lang === 'es') return pair[2] ?? pair[1] ?? pair[0];
+    if (lang === 'ru') return RU_TEXTS[key] ?? pair[1] ?? pair[0];
     return pair[1] ?? pair[0];
 }
 
@@ -901,7 +909,19 @@ export function language() {
 }
 
 export function toggleLanguage() {
-    lang = (lang === 'en') ? 'es' : (lang === 'es' ? 'zh' : 'en');
+    lang = SUPPORTED_LANGUAGES[(SUPPORTED_LANGUAGES.indexOf(lang) + 1) % SUPPORTED_LANGUAGES.length];
+    try {
+        localStorage.setItem('lang', lang);
+    } catch (e) {
+        // private window
+    }
+}
+
+export function setLanguage(next) {
+    if (!SUPPORTED_LANGUAGES.includes(next)) {
+        throw new RangeError(`Unsupported interface language: ${next}`);
+    }
+    lang = next;
     try {
         localStorage.setItem('lang', lang);
     } catch (e) {
@@ -911,8 +931,10 @@ export function toggleLanguage() {
 
 // Texts of the elements with data-i18n
 export function applyTexts(root = document) {
-    document.documentElement.lang = (lang === 'zh') ? 'zh-CN' : (lang === 'es' ? 'es' : 'en');
+    document.documentElement.lang = (lang === 'zh') ? 'zh-CN' : (lang === 'es' ? 'es' : (lang === 'ru' ? 'ru' : 'en'));
     root.querySelectorAll('[data-i18n]').forEach((el) => {
         el.textContent = t(el.dataset.i18n);
     });
+    const languageSelect = root.querySelector('#languageSelect');
+    if (languageSelect) languageSelect.value = lang;
 }

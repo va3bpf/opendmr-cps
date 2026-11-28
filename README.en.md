@@ -68,4 +68,4 @@ from a file on disk).
 - `py release.py`: makes the release page `opendmr-cps.html` (everything in one file, as small as it gets). Run it after
   changing the sources; needs `py -m pip install rjsmin rcssmin minify-html zopfli` first
 - `py build.py`: makes a readable `opendmr-cps-debug.html`, to debug the page opened from disk
-- tests (no radio, Node 18+): `node tools/web/tests/test-updater.mjs`, `test-bootloader.mjs`, `test-screen.mjs`
+- tests (no radio, Node 18+): `node tools/web/tests/test-updater.mjs`, `test-bootloader.mjs`, `test-screen.mjs`, `test-i18n.mjs`
